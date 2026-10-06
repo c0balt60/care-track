@@ -1,3 +1,25 @@
+# Care Track
+
+Care Track is a learning project built by a small team of student developers. We use it to practice a modern web stack (Next.js, React, TypeScript, Tailwind CSS), learn to collaborate on a shared codebase, and show our work for internship and co-op applications.
+
+## What it aims to be
+
+Care Track connects patients with doctors and other medical practitioners.
+
+Many healthcare systems run on outdated software and are booked far in advance. Waits for things like scans can stretch to months. Care Track shows when practitioners have open availability, so patients can find a slot and sign up for an appointment.
+
+The app is loosely modeled on parts of [PointClickCare](https://pointclickcare.com/), a widely used healthcare software platform. We're not trying to clone it. The goal is to get hands-on with the kinds of problems that software solves, such as scheduling, patient and practitioner records, and secure access to care data, so we're ready to work on real healthcare software.
+
+The core idea:
+
+- Practitioners publish their open availability.
+- Patients browse that availability and sign up for an appointment.
+- Both sides use a dashboard to keep track of upcoming appointments.
+
+## How we use AI
+
+The team writes the code. AI agents may help with front-end visual design and documentation and can review our work and suggest next steps, but they don't write backend code. The full rules are in [AGENTS.md](AGENTS.md).
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
