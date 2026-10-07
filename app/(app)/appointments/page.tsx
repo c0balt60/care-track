@@ -58,7 +58,7 @@ export default async function Appointments({ searchParams }: PageProps<"/appoint
                   className="-mb-px flex min-h-11 items-center gap-1.5 border-b-2 border-transparent px-3 text-sm font-medium whitespace-nowrap text-muted hover:text-ink aria-[current=page]:border-accent aria-[current=page]:text-ink"
                 >
                   {t.label}
-                  <span className="rounded-full bg-slate-100 px-1.5 text-xs text-slate-700">{mine.filter(t.match).length}</span>
+                  <span className="rounded-full bg-sand px-1.5 text-xs text-ink">{mine.filter(t.match).length}</span>
                 </Link>
               </li>
             ))}

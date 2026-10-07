@@ -2,7 +2,7 @@ import { Logo } from "./ui";
 
 export function Footer() {
   return (
-    <footer className="border-t border-line bg-surface">
+    <footer className="bg-sand">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-8 text-sm text-muted sm:px-6">
         <div>
           <Logo />

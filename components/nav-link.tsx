@@ -16,7 +16,7 @@ export function NavLink({ href, prefix, children }: { href: string; prefix?: boo
       // Client navigation keeps the mobile menu popover open, so close it.
       onClick={(e) => e.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover()}
       className={`flex min-h-11 items-center justify-between gap-2 rounded-lg px-3 text-sm font-medium ${
-        current ? "bg-accent-soft text-teal-800" : "text-muted hover:bg-slate-100 hover:text-ink"
+        current ? "bg-avocado-300 text-avocado-900" : "text-white/75 hover:bg-white/10 hover:text-white"
       }`}
     >
       {children}

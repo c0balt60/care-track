@@ -44,7 +44,7 @@ export default async function ClinicSettings({ searchParams }: PageProps<"/clini
               {clinic.services.map((s) => (
                 <li key={s} className="tag gap-1 pr-1">
                   {s}
-                  <button type="button" aria-label={`Remove ${s}`} className="grid size-7 place-items-center rounded-full hover:bg-slate-200">
+                  <button type="button" aria-label={`Remove ${s}`} className="grid size-7 place-items-center rounded-full hover:bg-avocado-300">
                     <XIcon width={14} height={14} />
                   </button>
                 </li>

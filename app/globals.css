@@ -5,16 +5,25 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
-  --color-bg: var(--color-slate-50);
+  /* Warm neutrals: cream page, sand bands, white cards. */
+  --color-bg: #f6f2ea;
+  --color-sand: #ebe2d1;
   --color-surface: var(--color-white);
-  --color-line: var(--color-slate-200);
-  --color-line-strong: var(--color-slate-500);
-  --color-ink: var(--color-slate-900);
-  --color-muted: var(--color-slate-600);
+  --color-line: #e2d9c8;
+  --color-line-strong: var(--color-stone-500);
+  --color-ink: #17211c;
+  --color-muted: #55605a;
   --color-accent: var(--color-teal-700);
   --color-accent-hover: var(--color-teal-800);
   --color-accent-soft: var(--color-teal-50);
   --color-focus: var(--color-teal-600);
+
+  /* Second brand color. 100/300 for highlights, 800 for dark panels, 900 for text on light avocado.
+     Blue (Tailwind's) is for info: tips, "completed". */
+  --color-avocado-100: #eef2d6;
+  --color-avocado-300: #c8d87a;
+  --color-avocado-800: #36432a;
+  --color-avocado-900: #262f1d;
 }
 
 @layer base {
@@ -34,7 +43,7 @@
 
   dialog::backdrop,
   [popover]::backdrop {
-    background: rgb(15 23 42 / 0.45);
+    background: rgb(23 33 28 / 0.5);
   }
 
   @media (prefers-reduced-motion: no-preference) {
@@ -52,7 +61,11 @@
     @apply bg-accent text-white hover:bg-accent-hover;
   }
   .btn-secondary {
-    @apply border border-line bg-surface text-ink hover:bg-slate-100;
+    @apply border border-line bg-surface text-ink hover:bg-bg;
+  }
+  /* Outline button for dark panels. */
+  .btn-ghost {
+    @apply border border-white/35 text-white hover:bg-white/10;
   }
   .btn-danger {
     @apply bg-red-700 text-white hover:bg-red-800;
@@ -80,6 +93,12 @@
     @apply inline-flex min-h-11 items-center justify-center rounded-full bg-accent-soft px-4 text-sm font-semibold text-teal-800 hover:bg-teal-100;
   }
   .tag {
-    @apply inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700;
+    @apply inline-flex items-center rounded-full bg-avocado-100 px-3 py-1 text-sm text-avocado-900;
+  }
+
+  /* Dark avocado panel: the home page band and the app sidebar. */
+  .panel-dark {
+    @apply bg-avocado-800 text-white;
+    --color-focus: var(--color-avocado-300);
   }
 }

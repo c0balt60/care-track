@@ -17,6 +17,8 @@ function Icon({ children, ...props }: SVGProps<SVGSVGElement>) {
       strokeLinejoin="round"
       aria-hidden="true"
       className="shrink-0"
+      // Dark Reader restyles stroked SVGs before hydration. Only this element's attributes are ignored.
+      suppressHydrationWarning
       {...props}
     >
       {children}

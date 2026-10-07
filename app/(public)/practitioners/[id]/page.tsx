@@ -18,7 +18,7 @@ export default async function PractitionerProfile({ params, searchParams }: Page
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       {old && (
-        <p className="mb-6 flex items-start gap-2 rounded-xl border border-teal-200 bg-accent-soft px-4 py-3 text-teal-900">
+        <p className="mb-6 flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-blue-900">
           <InfoIcon className="mt-0.5 shrink-0" />
           <span>
             Pick a new time for your {formatWhen(old.start, p.timeZone)} appointment.{" "}

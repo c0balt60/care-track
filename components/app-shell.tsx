@@ -31,10 +31,10 @@ function Nav({ viewer }: { viewer: Viewer }) {
           </li>
         ))}
       </ul>
-      <div className="mt-auto border-t border-line pt-4">
+      <div className="mt-auto border-t border-white/15 pt-4">
         <p className="px-3 font-medium">{viewer.name}</p>
-        <p className="px-3 text-sm text-muted">{roleLabel[viewer.role]}</p>
-        <Link href="/login" className="mt-2 flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-muted hover:bg-slate-100 hover:text-ink">
+        <p className="px-3 text-sm text-white/70">{roleLabel[viewer.role]}</p>
+        <Link href="/login" className="mt-2 flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-white/75 hover:bg-white/10 hover:text-white">
           Log out
         </Link>
       </div>
@@ -46,26 +46,26 @@ function Nav({ viewer }: { viewer: Viewer }) {
 export function AppShell({ viewer, children }: { viewer: Viewer; children: ReactNode }) {
   return (
     <div className="flex-1 lg:flex">
-      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col gap-6 border-r border-line bg-surface p-4 lg:flex">
+      <aside className="panel-dark sticky top-0 hidden h-dvh w-64 shrink-0 flex-col gap-6 p-4 lg:flex">
         <Logo href="/dashboard" />
         <Nav viewer={viewer} />
       </aside>
 
       <div className="min-w-0 flex-1">
         <PreviewBar role={viewer.role} />
-        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-line bg-surface px-4 lg:hidden">
+        <header className="panel-dark sticky top-0 z-10 flex h-16 items-center justify-between px-4 lg:hidden">
           <Logo href="/dashboard" />
-          <button type="button" popoverTarget="app-menu" className="btn btn-secondary">
+          <button type="button" popoverTarget="app-menu" className="btn btn-ghost">
             <MenuIcon /> Menu
           </button>
           <div
             id="app-menu"
             popover="auto"
-            className="inset-x-0 top-0 bottom-auto m-0 w-full max-w-none border-b border-line bg-surface p-4 shadow-lg"
+            className="panel-dark inset-x-0 top-0 bottom-auto m-0 w-full max-w-none p-4 shadow-lg"
           >
             <div className="mb-4 flex items-center justify-between">
               <Logo href="/dashboard" />
-              <button type="button" popoverTarget="app-menu" popoverTargetAction="hide" className="btn btn-secondary px-3" aria-label="Close menu">
+              <button type="button" popoverTarget="app-menu" popoverTargetAction="hide" className="btn btn-ghost px-3" aria-label="Close menu">
                 <XIcon />
               </button>
             </div>

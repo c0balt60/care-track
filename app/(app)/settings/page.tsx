@@ -42,7 +42,7 @@ export default async function Settings({ searchParams }: PageProps<"/settings">)
             <h2 id="public" className="text-lg font-semibold">Public profile</h2>
             <p className="text-sm text-muted">Patients see this on your profile and in search results.</p>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <Field label="Photo" id="photo" type="file" accept="image/*" className="input file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1" />
+              <Field label="Photo" id="photo" type="file" accept="image/*" className="input file:mr-3 file:rounded-md file:border-0 file:bg-sand file:px-3 file:py-1" />
               <Field label="Credentials" id="credentials" defaultValue={p.credentials} required />
               <Field label="Specialty" id="specialty" defaultValue={p.specialty} required />
               <Field label="Services" id="services" defaultValue={p.services.join(", ")} hint="Separate with commas." />

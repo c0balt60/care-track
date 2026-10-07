@@ -82,7 +82,7 @@ export default async function Book({ params, searchParams }: PageProps<"/book/[s
           <textarea id="reason" name="reason" rows={3} required defaultValue={old?.reason} className="input" aria-describedby="mode" />
         </div>
         <p id="mode" className="flex items-start gap-2 text-sm text-muted">
-          <InfoIcon className="mt-px shrink-0" width={18} height={18} />
+          <InfoIcon className="mt-px shrink-0 text-blue-700" width={18} height={18} />
           {!approval ? "This time is confirmed right away."
             : old ? `${p.name} reviews requests first. You keep your current time until the new one is accepted.`
             : `${p.name} reviews requests before confirming.`}

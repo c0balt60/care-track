@@ -31,8 +31,8 @@ const badges: Record<Status, [label: string, className: string]> = {
   pending: ["Pending", "bg-amber-50 text-amber-800"],
   confirmed: ["Confirmed", "bg-green-50 text-green-800"],
   declined: ["Declined", "bg-red-50 text-red-700"],
-  cancelled: ["Cancelled", "bg-slate-100 text-slate-700"],
-  completed: ["Completed", "bg-slate-100 text-slate-700"],
+  cancelled: ["Cancelled", "bg-stone-100 text-stone-700"],
+  completed: ["Completed", "bg-blue-50 text-blue-800"],
 };
 
 export function StatusBadge({ status }: { status: Status }) {
@@ -47,10 +47,13 @@ export function Avatar({ name, size = "md" }: { name: string; size?: "md" | "lg"
     .map((w) => w[0])
     .slice(0, 2)
     .join("");
+  // Same name, same color.
+  const tones = ["bg-accent-soft text-teal-800", "bg-blue-50 text-blue-800", "bg-avocado-100 text-avocado-900"];
+  const tone = tones[[...name].reduce((n, c) => n + c.charCodeAt(0), 0) % tones.length];
   return (
     <span
       aria-hidden="true"
-      className={`grid shrink-0 place-items-center rounded-full bg-accent-soft font-semibold text-teal-800 ${size === "lg" ? "size-16 text-xl" : "size-11"}`}
+      className={`grid shrink-0 place-items-center rounded-full font-semibold ${tone} ${size === "lg" ? "size-16 text-xl" : "size-11"}`}
     >
       {initials}
     </span>
