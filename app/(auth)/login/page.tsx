@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useRouter } from "next/navigation"
 import React, { useState } from "react";
 
@@ -38,68 +39,62 @@ export default function Login() {
     };
 
     return (
-        <div className="flex min-h-dvh justify-center items-center">
-            <div className="w-full max-w-md space-y-8 bg-(--surface) p-8 rounded-xl shadow-md ">
+        <div className="card p-6 sm:p-8">
+            <h1 className="text-2xl font-semibold tracking-tight">Log in</h1>
+            <p className="mt-1 text-muted">Welcome back. Log in to book and manage appointments.</p>
+
+            <form className="mt-6 space-y-4" onSubmit={submit}>
+                {err && (
+                    <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                        {err}
+                    </div>
+                )}
+
                 <div>
-                    <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-gray-500">
-                        Login
-                    </h2>
+                    <label htmlFor="email-address" className="label">
+                        Email
+                    </label>
+                    <input
+                        id="email-address"
+                        name="email"
+                        type="email"
+                        autoComplete="email"
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="input"
+                        placeholder="name@example.com"
+                    />
                 </div>
 
-                <form className="mt-8 space-y-6" onSubmit={submit}>
-                    {err && (
-                        <div className="rounded-md bg-red-800 p-4 text-sm font-bold text-white border border-red-500">
-                            {err}
-                        </div>
-                    )}
+                <div>
+                    <label htmlFor="password" className="label">
+                        Password
+                    </label>
+                    <input
+                        id="password"
+                        name="password"
+                        type="password"
+                        autoComplete="current-password"
+                        required
+                        value={password}
+                        onChange={(e) => setPass(e.target.value)}
+                        className="input"
+                    />
+                </div>
 
-                    <div className="space-y-4 rounded-md shadow-sm">
-                        <div>
-                            <label htmlFor="email-address" className="block text-sm font-medium text-gray-700 mb-1">
-                                Email Address
-                            </label>
-                            <input
-                                id="email-address"
-                                name="email"
-                                type="email"
-                                autoComplete="email"
-                                required
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                className="block w-full rounded-md px-3 py-2 focus:outline-none sm:text-sm"
-                                placeholder="name@exmaple.com"
-                            />
-                        </div>
+                <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="btn btn-primary w-full disabled:opacity-60"
+                >
+                    {isLoading ? "Logging in…" : "Log in"}
+                </button>
+            </form>
 
-                        <div>
-                            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                                Password
-                            </label>
-                            <input
-                                id="password"
-                                name="password"
-                                type="password"
-                                autoComplete="current-password"
-                                required
-                                value={password}
-                                onChange={(e) => setPass(e.target.value)}
-                                className="block w-full rounded-md px-3 py-2 focus:outline-none sm:text-sm"
-                                placeholder="*********"
-                            />
-                        </div>
-                    </div>
-
-                    <div>
-                        <button
-                            type="submit"
-                            disabled={isLoading}
-                            className="button group relative flex w-full justify-center rounded-md px-3 py-2 text-sm font-semibold"
-                        >
-                            {isLoading ? 'Signing in...' : "Sign in"}
-                        </button>
-                    </div>
-                </form>
-            </div>
+            <p className="mt-6 text-center text-sm text-muted">
+                New to CareTrack? <Link href="/signup" className="link">Create an account</Link>
+            </p>
         </div>
     )
 }

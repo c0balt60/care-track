@@ -1,14 +1,15 @@
-export function Footer() {
-    return (
-        <footer>
-            <div>
-                <span className="logo">
-                    <span className="logo-mark">&gt;_</span>
-                    Care Track
-                </span>
+import { Logo } from "./ui";
 
-                <p>Designing valulable solutions</p>
-            </div>
-        </footer>
-    )
+export function Footer() {
+  return (
+    <footer className="border-t border-line bg-surface">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-8 text-sm text-muted sm:px-6">
+        <div>
+          <Logo />
+          <p className="mt-1">Designing valuable solutions</p>
+        </div>
+        <p>A student project. Not for real medical care.</p>
+      </div>
+    </footer>
+  );
 }

@@ -1,48 +1,15 @@
-import StatCard from "./components/StatCard";
+import { param } from "@/components/ui";
+import { getViewer } from "@/lib/mock-data";
+import PatientHome from "./_components/PatientHome";
+import PractitionerHome from "./_components/PractitionerHome";
+import StaffHome from "./_components/StaffHome";
 
-export default function Dashboard() {
-    return (
-        <div className="min-h-dvh w-80vw">
-            <div className="p-20">
-                <h1 className="text-2xl font-semibold tracking-tight">
-                    Dashboard
-                </h1>
-                <p className="mt-1 text-sm text-gray-500">
-                    Here's what's happening with your clinic today
-                </p>
-            </div>
+export default async function Dashboard({ searchParams }: PageProps<"/dashboard">) {
+    const viewer = await getViewer();
+    const sp = await searchParams;
+    if (!viewer) return null; // the (app) layout shows a log-in prompt
 
-            <section className="p-20 grid grid-cols-3 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
-                <StatCard
-                    title="Upcoming Appointments"
-                    value="24"
-                    description="Today"
-                />
-
-                <StatCard
-                    title="Total Patients"
-                    value="1,209"
-                    description="+ 129"
-                />
-
-                <StatCard
-                    title="Upcoming Appointments"
-                    value="24"
-                    description="Today"
-                />
-
-                <StatCard
-                    title="Upcoming Appointments"
-                    value="24"
-                    description="Today"
-                />
-
-                <StatCard
-                    title="Upcoming Appointments"
-                    value="24"
-                    description="Today"
-                />
-            </section>
-        </div>
-    )
+    if (viewer.role === "patient") return <PatientHome viewer={viewer} />;
+    if (viewer.role === "practitioner") return <PractitionerHome viewer={viewer} done={param(sp.done)} notice={param(sp.notice)} />;
+    return <StaffHome viewer={viewer} />;
 }

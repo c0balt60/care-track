@@ -3,21 +3,23 @@ export default function StatCard({
 }: {
         title: string,
         value: string,
-        description: string,
+        description?: string,
     }) {
     return (
-        <div className="card p-30 flex flex-col">
-            <h4 className="pb-3 font-bold">
+        <div className="card p-5 flex flex-col">
+            <h2 className="text-sm font-medium text-muted">
                 {title}
-            </h4>
+            </h2>
 
-            <p className="mt-8 text-3xl font-semibold">
+            <p className="mt-2 text-3xl font-semibold">
                 {value}
             </p>
 
-            <p className="mt-1 text-sx text-gray-500">
-                {description}
-            </p>
+            {description && (
+                <p className="mt-1 text-xs text-muted">
+                    {description}
+                </p>
+            )}
         </div>
     )
 }
