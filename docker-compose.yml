@@ -1,0 +1,39 @@
+# Local development services. The Next.js app itself still runs with `pnpm dev`.
+#
+#   cp .env.example .env
+#   docker compose up -d
+#
+# Compose reads `.env` for the ${VAR:-default} values below, so the same file
+# configures both these containers and the app.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-caretrack}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-caretrack}
+      POSTGRES_DB: ${POSTGRES_DB:-caretrack}
+    ports:
+      # 127.0.0.1 = only this machine can connect, not others on the same Wi-Fi.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # Named volume so data survives `docker compose down`.
+      # Wipe it with `docker compose down -v`.
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Catches every email the app sends locally; nothing reaches a real inbox.
+  mailpit:
+    image: axllent/mailpit:v1.21.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025" # SMTP: the app sends here
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025" # Web inbox: http://localhost:8025
+
+volumes:
+  postgres-data:
