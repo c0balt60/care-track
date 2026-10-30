@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Rules for AI agents in this repo
 
-Care Track is a learning and portfolio project. See [README.md](README.md) for what the app aims to be. The team writes the code; AI agents help keep the work on track. These rules apply to every AI agent (Claude Code, Copilot, Cursor, Codex, and others).
+Care Track is a learning and portfolio project. See [README.md](README.md) for what the app aims to be. AI agents may write code, but the team must always understand how the system is built. These rules apply to every AI agent (Claude Code, Copilot, Cursor, Codex, and others).
 
 ## Do NOT work on the backend
 
@@ -19,10 +19,14 @@ Care Track is a learning and portfolio project. See [README.md](README.md) for w
 
 ## What agents may do
 
+- **Write code:** front-end logic and UI, tooling, tests, and CI. Backend code is still off limits (see above).
 - **Keep the team on track:** review plans and code, point out bugs, explain concepts, and suggest next steps.
-- **Design the front end visually:** layout, styling (Tailwind), and UI component markup.
 - **Write documentation:** README, files in `docs/`, guides, and code comments.
 
-## Everything else
+## Explain what you build
 
-Don't do the heavy lifting. For anything not listed above, including non-visual front-end logic like data fetching, state, and form handling, explain the approach and give steps rather than writing it.
+Whenever you write code, explain how it works so the developers can maintain it without you:
+
+- Say what you changed and why, file by file, and how the pieces connect.
+- Call out decisions and trade-offs, and point to the docs you followed.
+- The larger the task, the more this matters. For multi-file or architectural changes, outline the plan before writing code, and finish with a walkthrough of the result.
