@@ -17,6 +17,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
+      - run: pnpm test --run
       # Route types (PageProps etc.) are generated, not committed
       - run: pnpm exec next typegen
       - run: pnpm exec tsc --noEmit
