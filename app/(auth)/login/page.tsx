@@ -31,8 +31,8 @@ export default function Login() {
             // Redirect to dashboard on successful login
             router.push("/dashboard");
             router.refresh();
-        } catch (e: any) {
-            setErr(e.message || "Invalid credentials");
+        } catch (e) {
+            setErr((e instanceof Error && e.message) || "Invalid credentials");
         } finally {
             setIsLoading(false);
         }
