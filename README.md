@@ -18,7 +18,7 @@ The core idea:
 
 ## How we use AI
 
-The team writes the code. AI agents may help with front-end visual design and documentation and can review our work and suggest next steps, but they don't write backend code. The full rules are in [AGENTS.md](AGENTS.md).
+AI agents may write front-end code, tooling, tests, and docs, and must explain how they built it so the team understands the system. They don't write backend code. The full rules are in [AGENTS.md](AGENTS.md).
 
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
