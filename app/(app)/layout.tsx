@@ -3,7 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { EmptyState, Logo } from "@/components/ui";
 import { UserIcon } from "@/components/icons";
 import { PreviewBar } from "@/components/preview-bar";
-import { getViewer } from "@/lib/mock-data";
+import { getViewer } from "@/lib/auth";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const viewer = await getViewer();

@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PlusIcon, XIcon } from "@/components/icons";
 import { Field, Notice, noticeText, PageHeader, param } from "@/components/ui";
-import { getClinic, getViewer, invites, practitioners } from "@/lib/mock-data";
+import { getViewer } from "@/lib/auth";
+import { getClinic, invites, practitioners } from "@/lib/mock-data";
 
 const pill = "inline-flex rounded-full px-2.5 py-0.5 text-sm font-medium";
 

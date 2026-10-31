@@ -1,6 +1,6 @@
 import { PreviewBar } from "@/components/preview-bar";
 import { Logo } from "@/components/ui";
-import { getViewer } from "@/lib/mock-data";
+import { getViewer } from "@/lib/auth";
 
 export default async function AuthLayout({ children }: LayoutProps<"/">) {
   const viewer = await getViewer();

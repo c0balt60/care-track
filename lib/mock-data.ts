@@ -1,7 +1,6 @@
 // PROTOTYPE DATA. Every function here stands in for an API call the team will
 // write. Shapes follow "What the screens need from the API" in
 // docs/frontend-outline.md. Dates are relative to today so the screens never go stale.
-import { cookies } from "next/headers";
 import { addDays, dayKey, type DayKey, toMinutes, weekday, zoned } from "./dates";
 
 export type Role = "patient" | "practitioner" | "staff";
@@ -301,19 +300,4 @@ export function previewBooking(slotId: string, o: { patientId: string; reason: s
     history: [{ label: o.bookedBy === "staff" ? "Booked by front desk" : "Booked", at: new Date() }],
   };
   return a;
-}
-
-const viewers: Record<Role, Viewer> = {
-  patient: { role: "patient", name: "Jordan Lee", patientId: "jordan" },
-  practitioner: { role: "practitioner", name: "Dr. Sam Rivera", practitionerId: "rivera" },
-  staff: { role: "staff", name: "Morgan Ellis", clinicId: "northside" },
-};
-
-/**
- * Who is "signed in". Set by the prototype bar's role switcher; null means
- * signed out. The real app reads the session here instead.
- */
-export async function getViewer(): Promise<Viewer | null> {
-  const role = (await cookies()).get("preview-role")?.value ?? "patient";
-  return Object.hasOwn(viewers, role) ? viewers[role as Role] : null;
 }

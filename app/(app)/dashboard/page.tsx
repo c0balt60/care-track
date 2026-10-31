@@ -1,5 +1,5 @@
 import { param } from "@/components/ui";
-import { getViewer } from "@/lib/mock-data";
+import { getViewer } from "@/lib/auth";
 import PatientHome from "./_components/PatientHome";
 import PractitionerHome from "./_components/PractitionerHome";
 import StaffHome from "./_components/StaffHome";
