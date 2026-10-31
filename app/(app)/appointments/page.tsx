@@ -3,7 +3,8 @@ import { AppointmentCard, RequestActions } from "@/components/appointment-card";
 import { CalendarIcon } from "@/components/icons";
 import { EmptyState, Notice, PageHeader, param } from "@/components/ui";
 import { dayKey, formatDayKey } from "@/lib/dates";
-import { type Appointment, appointmentsFor, getPatient, getAppointment, getViewer, isUpcoming, practitioners } from "@/lib/mock-data";
+import { getViewer } from "@/lib/auth";
+import { type Appointment, appointmentsFor, getPatient, getAppointment, isUpcoming, practitioners } from "@/lib/mock-data";
 
 const tabs = {
   upcoming: { label: "Upcoming", empty: "No upcoming appointments", match: (a: Appointment) => a.status === "confirmed" && isUpcoming(a) },

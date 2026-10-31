@@ -4,8 +4,9 @@ import { CancelDialog, RequestActions, statusNote } from "@/components/appointme
 import { ArrowLeftIcon } from "@/components/icons";
 import { Notice, param, StatusBadge } from "@/components/ui";
 import { formatDay, formatWhen } from "@/lib/dates";
+import { getViewer } from "@/lib/auth";
 import {
-  type Appointment, getAppointment, getClinic, getPatient, getPractitioner, getViewer, involves, isUpcoming, previewBooking,
+  type Appointment, getAppointment, getClinic, getPatient, getPractitioner, involves, isUpcoming, previewBooking,
 } from "@/lib/mock-data";
 
 export default async function AppointmentDetail({ params, searchParams }: PageProps<"/appointments/[id]">) {

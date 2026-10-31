@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Field, Notice, noticeText, PageHeader, param } from "@/components/ui";
-import { getPatient, getPractitioner, getViewer } from "@/lib/mock-data";
+import { getViewer } from "@/lib/auth";
+import { getPatient, getPractitioner } from "@/lib/mock-data";
 
 export default async function Settings({ searchParams }: PageProps<"/settings">) {
   const viewer = await getViewer();

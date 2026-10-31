@@ -4,7 +4,8 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PlusIcon } from "@/components/icons";
 import { Field, Notice, noticeText, PageHeader, param } from "@/components/ui";
 import { addDays, dayKey, formatDayKey, formatZone } from "@/lib/dates";
-import { getPractitioner, getViewer, slotsFor, today } from "@/lib/mock-data";
+import { getViewer } from "@/lib/auth";
+import { getPractitioner, slotsFor, today } from "@/lib/mock-data";
 
 const days: [number, string][] = [[1, "Monday"], [2, "Tuesday"], [3, "Wednesday"], [4, "Thursday"], [5, "Friday"], [6, "Saturday"], [0, "Sunday"]];
 

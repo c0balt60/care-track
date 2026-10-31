@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { ArrowLeftIcon, CalendarIcon, ClockIcon, InfoIcon, MapPinIcon } from "@/components/icons";
 import { EmptyState, PageHeader, param } from "@/components/ui";
 import { formatWhen } from "@/lib/dates";
-import { getAppointment, getClinic, getPractitioner, getSlot, getViewer } from "@/lib/mock-data";
+import { getViewer } from "@/lib/auth";
+import { getAppointment, getClinic, getPractitioner, getSlot } from "@/lib/mock-data";
 import PatientPicker from "./_components/PatientPicker";
 
 export default async function Book({ params, searchParams }: PageProps<"/book/[slotId]">) {

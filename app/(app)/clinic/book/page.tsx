@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { PractitionerCard } from "@/components/practitioner-card";
 import { PageHeader } from "@/components/ui";
-import { getClinic, getViewer, practitioners } from "@/lib/mock-data";
+import { getViewer } from "@/lib/auth";
+import { getClinic, practitioners } from "@/lib/mock-data";
 
 export default async function ClinicBook() {
   const viewer = await getViewer();
