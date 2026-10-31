@@ -12,14 +12,18 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 Care Track is a learning and portfolio project. See [README.md](README.md) for what the app aims to be. AI agents may write code, but the team must always understand how the system is built. These rules apply to every AI agent (Claude Code, Copilot, Cursor, Codex, and others).
 
-## Do NOT work on the backend
+## Backend work needs a write-up
 
-- Never write or edit backend code. That includes API route handlers (`app/api/**`), server actions, database schemas and queries, authentication and session logic, `proxy.ts`, and anything else that runs on the server.
-- When asked for backend work, reply with suggestions and step-by-step guidance instead: what to build, which files to touch, and which docs to read. The developer writes the code.
+Agents may write backend code: API route handlers (`app/api/**`), server actions, database schemas and queries, authentication and session logic, `proxy.ts`, and anything else that runs on the server. Because this code handles patient data and access control, every backend change must come with a write-up for the developer that covers:
+
+- **What it does:** the request or data flow from start to finish (who calls it, what it reads and writes, what it returns or redirects to).
+- **Trust and safety:** how the current user is identified, what input is validated, and which access checks run. Flag any temporary stand-ins, such as mock auth, and mark them in the code.
+- **Data changes:** tables and columns touched, and any migrations, with how to apply them.
+- **How to verify:** the commands or manual steps that show it works.
 
 ## What agents may do
 
-- **Write code:** front-end logic and UI, tooling, tests, and CI. Backend code is still off limits (see above).
+- **Write code:** front-end logic and UI, backend code (with the write-up above), tooling, tests, and CI.
 - **Keep the team on track:** review plans and code, point out bugs, explain concepts, and suggest next steps.
 - **Write documentation:** README, files in `docs/`, guides, and code comments.
 
