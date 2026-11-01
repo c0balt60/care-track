@@ -17,13 +17,14 @@ import {
 const id = () => uuid("id").primaryKey().defaultRandom();
 const  createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const updatedAt = () =>
-    timestamp("Updated_at", { withTimezone: true})
+    timestamp("updated_at", { withTimezone: true})
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date());
 
 //Keep these in sync with the types in lib/mock-data.ts
 export const ROLES = ["patient", "practitioner", "staff"] as const;
+export const USER_ROLES = [...ROLES, "admin"] as const;
 export const APPOINTMENT_STATUSES = ["pending", "confirmed", "declined", "cancelled", "completed"] as const;
 export const BOOKING_MODES = ["instant", "approval"] as const;
 export const BOOKED_BY = ["patient", "staff"] as const;
@@ -42,13 +43,13 @@ export const users = pgTable(
     id: id(),
     email: text("email").notNull(),
     name: text("name").notNull(),
-    role: text("role", { enum: ROLES }).notNull(),
+    role: text("role", { enum: USER_ROLES }).notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
     uniqueIndex("users_email_unique").on(sql`lower(${t.email})`),
-    check("users_role_check", oneOf("role", ROLES)),
+    check("users_role_check", oneOf("role", USER_ROLES)),
   ],
 );
  
