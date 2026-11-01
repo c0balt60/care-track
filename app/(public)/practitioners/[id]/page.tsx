@@ -6,8 +6,8 @@ import { SlotPicker } from "@/components/slot-picker";
 import { Avatar, param } from "@/components/ui";
 import { formatWhen } from "@/lib/dates";
 import { db } from "@/lib/db";
-import { practitioners } from "@/lib/db/schema";
-import { getAppointment, getClinic, getPractitioner } from "@/lib/mock-data";
+import { clinics, practitioners } from "@/lib/db/schema";
+import { getAppointment, getPractitioner } from "@/lib/mock-data";
 
 export default async function PractitionerProfile({ params, searchParams }: PageProps<"/practitioners/[id]">) {
   const { id } = await params;
@@ -15,7 +15,7 @@ export default async function PractitionerProfile({ params, searchParams }: Page
   const mock = getPractitioner(id);
   if (!mock) notFound();
 
-  // Profile text comes from the DB; hours, slots, and clinic are still mock data.
+  // Profile text and clinic come from the DB; hours and slots are still mock data.
   // ponytail: TEMPORARY. Links still use mock ids ("rivera"), not DB uuids, so match the row by name.
   // Look up by id once practitioners, slots, and links move to the DB.
   const [row] = await db
@@ -27,13 +27,14 @@ export default async function PractitionerProfile({ params, searchParams }: Page
       bio: practitioners.bio,
       city: practitioners.city,
       bookingMode: practitioners.bookingMode,
+      clinic: { id: clinics.id, name: clinics.name, address: clinics.address, city: clinics.city, phone: clinics.phone },
     })
     .from(practitioners)
+    .leftJoin(clinics, eq(clinics.id, practitioners.clinicId))
     .where(eq(practitioners.name, mock.name))
     .limit(1);
-  const p = { ...mock, ...row };
-
-  const clinic = getClinic(p.clinicId);
+  const { clinic, ...profile } = row ?? { clinic: null };
+  const p = { ...mock, ...profile };
   const old = getAppointment(param(sp.reschedule) ?? "");
 
   return (

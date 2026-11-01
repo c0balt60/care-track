@@ -10,8 +10,8 @@ type Props = {
   confirm: string;
   cancel?: string;
   danger?: boolean;
-  /** Where the form goes. Leave it out and the confirm button just closes the dialog. */
-  action?: string;
+  /** Where the form goes: a URL or a server action. Leave it out and the confirm button just closes the dialog. */
+  action?: string | ((formData: FormData) => Promise<void>);
   method?: "get" | "post";
   hidden?: Record<string, string>;
   /** Extra fields, e.g. a reason textarea */
@@ -36,7 +36,7 @@ export function ConfirmDialog({
         aria-labelledby={`${id}-title`}
         className="m-auto w-[calc(100%-2rem)] max-w-md rounded-xl bg-surface p-6 text-ink shadow-xl"
       >
-        <form action={action} method={action ? method : "dialog"} className="space-y-4">
+        <form action={action} method={typeof action === "function" ? undefined : action ? method : "dialog"} className="space-y-4">
           <h2 id={`${id}-title`} className="text-lg font-semibold">{title}</h2>
           {text && <p className="text-muted">{text}</p>}
           {Object.entries(hidden).map(([name, value]) => (

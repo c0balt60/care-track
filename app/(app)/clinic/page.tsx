@@ -1,10 +1,16 @@
+import { eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { PlusIcon, XIcon } from "@/components/icons";
+import { PlusIcon } from "@/components/icons";
 import { Field, Notice, noticeText, PageHeader, param } from "@/components/ui";
 import { getViewer } from "@/lib/auth";
-import { getClinic, invites, practitioners } from "@/lib/mock-data";
+import { clinicProfileErrors } from "@/lib/clinic-profile";
+import { db } from "@/lib/db";
+import { practitioners } from "@/lib/db/schema";
+import { getPractitioner, invites, practitioners as mockPractitioners } from "@/lib/mock-data";
+import { removePractitioner, updateClinicProfile } from "./actions";
+import { getCurrentClinic } from "./current-clinic";
 
 const pill = "inline-flex rounded-full px-2.5 py-0.5 text-sm font-medium";
 
@@ -14,9 +20,22 @@ export default async function ClinicSettings({ searchParams }: PageProps<"/clini
   if (!viewer) return null;
   if (viewer.role !== "staff") notFound();
 
-  const clinic = getClinic(viewer.clinicId)!;
-  const team = practitioners.filter((p) => p.clinicId === clinic.id);
-  const invited = invites.filter((i) => i.clinicId === clinic.id);
+  const clinic = await getCurrentClinic();
+  if (!clinic) return <p role="alert" className="card p-5">{clinicProfileErrors["no-clinic"]}</p>;
+
+  const team = await db
+    .select({ id: practitioners.id, name: practitioners.name, specialty: practitioners.specialty })
+    .from(practitioners)
+    .where(eq(practitioners.clinicId, clinic.id))
+    .orderBy(practitioners.name);
+  // ponytail: TEMPORARY. Invites have no table yet (no email service), so they stay mock data.
+  const invited = invites.filter((i) => i.clinicId === viewer.clinicId);
+  // ponytail: TEMPORARY. /practitioners/[id] still takes mock ids, so link by matching names.
+  const profileHref = (name: string) => {
+    const mock = mockPractitioners.find((m) => m.name === name);
+    return mock && getPractitioner(mock.id) ? `/practitioners/${mock.id}` : null;
+  };
+  const error = noticeText(clinicProfileErrors, param(sp.error));
   const notice = noticeText(
     { saved: "Clinic profile saved.", invited: "Invite sent.", removed: "Practitioner removed." },
     param(sp.notice),
@@ -30,35 +49,18 @@ export default async function ClinicSettings({ searchParams }: PageProps<"/clini
         actions={<Link href={`/clinics/${clinic.id}`} className="btn btn-secondary">View public page</Link>}
       />
       {notice && <Notice>{notice}</Notice>}
+      {error && <p role="alert" className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-800">{error}</p>}
 
       <section aria-labelledby="profile" className="card p-5">
         <h2 id="profile" className="text-lg font-semibold">Clinic profile</h2>
-        {/* Prototype: posts back here. The real form calls the team's save action. */}
-        <form method="post" action="/clinic?notice=saved" className="mt-4 grid gap-4 sm:grid-cols-2">
+        <form action={updateClinicProfile} className="mt-4 grid gap-4 sm:grid-cols-2">
           <Field label="Clinic name" id="name" defaultValue={clinic.name} required />
           <Field label="Phone" id="phone" type="tel" defaultValue={clinic.phone} required />
           <Field label="Street address" id="address" defaultValue={clinic.address} required />
           <Field label="City" id="city" defaultValue={clinic.city} required />
-          <fieldset className="sm:col-span-2">
-            <legend className="label">Services</legend>
-            <ul className="flex flex-wrap gap-2">
-              {clinic.services.map((s) => (
-                <li key={s} className="tag gap-1 pr-1">
-                  {s}
-                  <button type="button" aria-label={`Remove ${s}`} className="grid size-7 place-items-center rounded-full hover:bg-avocado-300">
-                    <XIcon width={14} height={14} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <div className="mt-3 flex max-w-md items-end gap-2">
-              <div className="flex-1">
-                <label htmlFor="newService" className="label">Add a service</label>
-                <input id="newService" name="newService" className="input" placeholder="e.g. Pediatrics" />
-              </div>
-              <button type="button" className="btn btn-secondary"><PlusIcon /> Add</button>
-            </div>
-          </fieldset>
+          <div className="sm:col-span-2">
+            <Field label="Services" id="services" defaultValue={clinic.services.join(", ")} hint="Separate with commas." />
+          </div>
           <div className="flex justify-end sm:col-span-2">
             <button className="btn btn-primary">Save profile</button>
           </div>
@@ -94,7 +96,7 @@ export default async function ClinicSettings({ searchParams }: PageProps<"/clini
           <tbody className="divide-y divide-line border-t border-line">
             {team.map((p) => (
               <tr key={p.id}>
-                <td className="py-3 pr-2"><Link href={`/practitioners/${p.id}`} className="link">{p.name}</Link></td>
+                <td className="py-3 pr-2">{profileHref(p.name) ? <Link href={profileHref(p.name)!} className="link">{p.name}</Link> : p.name}</td>
                 <td className="hidden py-3 pr-2 sm:table-cell">{p.specialty}</td>
                 <td className="py-3 pr-2"><span className={`${pill} bg-green-50 text-green-800`}>Active</span></td>
                 <td className="py-3 text-right">
@@ -105,8 +107,8 @@ export default async function ClinicSettings({ searchParams }: PageProps<"/clini
                     text="They’ll leave your clinic’s page. Appointments already booked stay booked."
                     confirm="Remove"
                     danger
-                    action="/clinic?notice=removed"
-                    method="post"
+                    action={removePractitioner}
+                    hidden={{ practitionerId: p.id }}
                   />
                 </td>
               </tr>
