@@ -2,8 +2,10 @@ import Link from "next/link";
 import { Field, Notice, noticeText, PageHeader, param } from "@/components/ui";
 import { getPractitioner } from "@/lib/mock-data";
 import { patientDetailErrors } from "@/lib/patient-details";
-import { updatePatientDetails } from "./actions";
+import { practitionerProfileErrors } from "@/lib/practitioner-profile";
+import { updatePatientDetails, updatePractitionerProfile } from "./actions";
 import { getCurrentPatient } from "./current-patient";
+import { getCurrentPractitioner } from "./current-practitioner";
 import { getViewer } from "@/lib/auth";
 
 export default async function Settings({ searchParams }: PageProps<"/settings">) {
@@ -13,9 +15,11 @@ export default async function Settings({ searchParams }: PageProps<"/settings">)
 
   const patient = viewer.role === "patient" ? await getCurrentPatient() : null;
   const p = viewer.role === "practitioner" ? getPractitioner(viewer.practitionerId) : undefined;
+  const profile = p ? await getCurrentPractitioner() : null;
+  const action = patient ? updatePatientDetails : profile ? updatePractitionerProfile : null;
   const email = `${viewer.name.replace(/^Dr\.\s*/, "").toLowerCase().replace(/\s+/g, ".")}@example.com`;
   const notice = noticeText({ saved: "Changes saved." }, param(sp.notice));
-  const error = noticeText(patientDetailErrors, param(sp.error));
+  const error = noticeText({ ...patientDetailErrors, ...practitionerProfileErrors }, param(sp.error));
 
   return (
     <>
@@ -26,8 +30,8 @@ export default async function Settings({ searchParams }: PageProps<"/settings">)
       {notice && <Notice>{notice}</Notice>}
       {error && <p role="alert" className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-800">{error}</p>}
 
-      {/* Patients save name, DOB, and phone to the DB. Other roles are still prototype: posts back here. */}
-      <form {...(patient ? { action: updatePatientDetails } : { method: "post", action: "/settings?notice=saved" })} className="space-y-6">
+      {/* Patients save name, DOB, and phone; practitioners save their public profile. The rest is still prototype: posts back here. */}
+      <form {...(action ? { action } : { method: "post", action: "/settings?notice=saved" })} className="space-y-6">
         <section aria-labelledby="account" className="card p-5">
           <h2 id="account" className="text-lg font-semibold">Account</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -49,12 +53,12 @@ export default async function Settings({ searchParams }: PageProps<"/settings">)
             <p className="text-sm text-muted">Patients see this on your profile and in search results.</p>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <Field label="Photo" id="photo" type="file" accept="image/*" className="input file:mr-3 file:rounded-md file:border-0 file:bg-sand file:px-3 file:py-1" />
-              <Field label="Credentials" id="credentials" defaultValue={p.credentials} required />
-              <Field label="Specialty" id="specialty" defaultValue={p.specialty} required />
-              <Field label="Services" id="services" defaultValue={p.services.join(", ")} hint="Separate with commas." />
+              <Field label="Credentials" id="credentials" defaultValue={profile?.credentials ?? p.credentials} required />
+              <Field label="Specialty" id="specialty" defaultValue={profile?.specialty ?? p.specialty} required />
+              <Field label="Services" id="services" defaultValue={(profile?.services ?? p.services).join(", ")} hint="Separate with commas." />
               <div className="sm:col-span-2">
                 <label htmlFor="bio" className="label">Bio</label>
-                <textarea id="bio" name="bio" rows={4} defaultValue={p.bio} className="input" />
+                <textarea id="bio" name="bio" rows={4} defaultValue={profile?.bio ?? p.bio} className="input" />
               </div>
             </div>
           </section>

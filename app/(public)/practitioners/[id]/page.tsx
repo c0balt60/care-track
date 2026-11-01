@@ -1,18 +1,40 @@
+import { eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { InfoIcon, MapPinIcon } from "@/components/icons";
 import { SlotPicker } from "@/components/slot-picker";
 import { Avatar, param } from "@/components/ui";
 import { formatWhen } from "@/lib/dates";
-import { getAppointment, getClinic, getPractitioner } from "@/lib/mock-data";
+import { db } from "@/lib/db";
+import { clinics, practitioners } from "@/lib/db/schema";
+import { getAppointment, getPractitioner } from "@/lib/mock-data";
 
 export default async function PractitionerProfile({ params, searchParams }: PageProps<"/practitioners/[id]">) {
   const { id } = await params;
   const sp = await searchParams;
-  const p = getPractitioner(id);
-  if (!p) notFound();
+  const mock = getPractitioner(id);
+  if (!mock) notFound();
 
-  const clinic = getClinic(p.clinicId);
+  // Profile text and clinic come from the DB; hours and slots are still mock data.
+  // ponytail: TEMPORARY. Links still use mock ids ("rivera"), not DB uuids, so match the row by name.
+  // Look up by id once practitioners, slots, and links move to the DB.
+  const [row] = await db
+    .select({
+      name: practitioners.name,
+      credentials: practitioners.credentials,
+      specialty: practitioners.specialty,
+      services: practitioners.services,
+      bio: practitioners.bio,
+      city: practitioners.city,
+      bookingMode: practitioners.bookingMode,
+      clinic: { id: clinics.id, name: clinics.name, address: clinics.address, city: clinics.city, phone: clinics.phone },
+    })
+    .from(practitioners)
+    .leftJoin(clinics, eq(clinics.id, practitioners.clinicId))
+    .where(eq(practitioners.name, mock.name))
+    .limit(1);
+  const { clinic, ...profile } = row ?? { clinic: null };
+  const p = { ...mock, ...profile };
   const old = getAppointment(param(sp.reschedule) ?? "");
 
   return (
