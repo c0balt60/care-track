@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { patients, users } from "@/lib/db/schema";
-import { getViewer } from "@/lib/mock-data";
+import { getViewer } from "@/lib/auth";
 
 /** The patients row for whoever is signed in, or null. */
 export async function getCurrentPatient() {
