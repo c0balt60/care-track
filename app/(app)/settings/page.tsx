@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { Field, Notice, noticeText, PageHeader, param } from "@/components/ui";
-import { getPractitioner, getViewer } from "@/lib/mock-data";
+import { getPractitioner } from "@/lib/mock-data";
 import { patientDetailErrors } from "@/lib/patient-details";
 import { updatePatientDetails } from "./actions";
 import { getCurrentPatient } from "./current-patient";
+import { getViewer } from "@/lib/auth";
 
 export default async function Settings({ searchParams }: PageProps<"/settings">) {
   const viewer = await getViewer();
