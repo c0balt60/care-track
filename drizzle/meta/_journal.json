@@ -15,6 +15,13 @@
       "when": 1793549502693,
       "tag": "0001_fix_updated_at_and_admin_role",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793584391658,
+      "tag": "0002_better_auth",
+      "breakpoints": true
     }
   ]
 }

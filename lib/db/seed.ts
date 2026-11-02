@@ -1,6 +1,7 @@
 // Resets the database and fills it with the prototype data from lib/mock-data.ts,
 // plus one signed-in user per role. Run with `pnpm db:seed`.
 import { sql } from "drizzle-orm";
+import { hashPassword } from "better-auth/crypto";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as mock from "../mock-data";
@@ -46,6 +47,8 @@ const seedUsers = [
   { key: "staff", email: "staff@caretrack.test", name: "Morgan Ellis", role: "staff" },
   { key: "admin", email: "admin@caretrack.test", name: "Admin", role: "admin" },
 ] as const;
+/** Every seed user's password. Dev only: this script refuses to run in production. */
+const SEED_PASSWORD = "password123";
 // Who each seed user is in the mock data (see `viewers` in lib/mock-data.ts).
 const PATIENT_SLUG = "jordan";
 const PRACTITIONER_SLUG = "rivera";
@@ -59,16 +62,22 @@ async function main() {
     // Start clean so the seed can be re-run any time.
     await tx.execute(sql`
       TRUNCATE payments, appointment_events, appointments, availability_exceptions,
-        availability_rules, clinic_staff, practitioners, patients, clinics, users
+        availability_rules, clinic_staff, practitioners, patients, clinics,
+        sessions, accounts, verifications, users
       RESTART IDENTITY CASCADE
     `);
- 
-    // ---- Users ----
+
+    // ---- Users and their logins ----
     const users = await tx
       .insert(schema.users)
       .values(seedUsers.map(({ email, name, role }) => ({ email, name, role })))
       .returning({ id: schema.users.id, role: schema.users.role });
     const userId = Object.fromEntries(users.map((u) => [u.role, u.id])) as Record<string, string>;
+    // Same shape Better Auth writes at sign-up: a "credential" account whose accountId is the user id.
+    const passwordHash = await hashPassword(SEED_PASSWORD);
+    await tx
+      .insert(schema.accounts)
+      .values(users.map((u) => ({ userId: u.id, accountId: u.id, providerId: "credential", password: passwordHash })));
  
     // ---- Clinics ----
     const clinicId = new Map<string, string>();
@@ -167,7 +176,7 @@ async function main() {
       `Seeded ${users.length} users, ${mock.clinics.length} clinic, ${mock.practitioners.length} practitioners, ` +
         `${mock.patients.length} patients, ${appts.length} appointments.`,
     );
-    console.log("Sign in as:", seedUsers.map((u) => `${u.key} → ${u.email}`).join(", "));
+    console.log("Log in as:", seedUsers.map((u) => `${u.key} → ${u.email}`).join(", "), `(password: ${SEED_PASSWORD})`);
   });
  
   await pool.end();

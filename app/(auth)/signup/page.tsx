@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Field, param } from "@/components/ui";
+import { SignupForm } from "./signup-form";
 
 const roles = {
   patient: { title: "I’m a patient", text: "Find open times and book appointments." },
@@ -45,8 +46,7 @@ export default async function Signup({ searchParams }: PageProps<"/signup">) {
       </p>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight">Create an account</h1>
 
-      {/* Prototype: posts to the dashboard. The real form calls the team's sign-up action. */}
-      <form method="post" action="/dashboard" className="mt-6 space-y-4">
+      <SignupForm as={as} next={next}>
         <Field label="Full name" id="name" autoComplete="name" required />
         <Field label="Email" id="email" type="email" autoComplete="email" required />
         <Field label="Password" id="password" type="password" autoComplete="new-password" minLength={8} required hint="At least 8 characters." />
@@ -58,27 +58,10 @@ export default async function Signup({ searchParams }: PageProps<"/signup">) {
           </>
         )}
 
-        {as === "practitioner" && (
-          <>
-            <Field label="Specialty" id="specialty" placeholder="e.g. Dermatology" required />
-            <Field label="Credentials" id="credentials" placeholder="e.g. MD" required hint="You can join a clinic later, when it invites you." />
-          </>
-        )}
-
-        {as === "clinic" && (
-          <fieldset className="space-y-4 border-t border-line pt-4">
-            <legend className="float-left mb-2 font-semibold">Your clinic</legend>
-            <div className="clear-left space-y-4">
-              <Field label="Clinic name" id="clinicName" required />
-              <Field label="Street address" id="address" autoComplete="street-address" required />
-              <Field label="City" id="city" autoComplete="address-level2" required />
-              <Field label="Clinic phone" id="clinicPhone" type="tel" required />
-            </div>
-          </fieldset>
-        )}
-
-        <button className="btn btn-primary w-full">Create account</button>
-      </form>
+        {/* TODO(onboarding): practitioner (specialty, credentials) and clinic (name, address,
+            city, phone) details come back once there's a step that saves them. Until then
+            we don't ask, because signUp would have nowhere to store them. */}
+      </SignupForm>
       {login}
     </div>
   );

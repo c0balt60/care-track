@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+    boolean,
     check,
     date, 
     index, 
@@ -44,6 +45,9 @@ export const users = pgTable(
     email: text("email").notNull(),
     name: text("name").notNull(),
     role: text("role", { enum: USER_ROLES }).notNull(),
+    // Better Auth fields. Property names must stay camelCase: Better Auth looks them up by key.
+    emailVerified: boolean("email_verified").notNull().default(false),
+    image: text("image"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -51,6 +55,67 @@ export const users = pgTable(
     uniqueIndex("users_email_unique").on(sql`lower(${t.email})`),
     check("users_role_check", oneOf("role", USER_ROLES)),
   ],
+);
+
+// The three tables below belong to Better Auth (lib/better-auth.ts). Column
+// names follow its core schema; don't rename properties without checking its docs.
+
+/** One row per signed-in browser. The cookie holds `token`; everything else stays here. */
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: id(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    token: text("token").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("sessions_token_unique").on(t.token), index("sessions_user_idx").on(t.userId)],
+);
+
+/**
+ * How a user signs in. Email + password is providerId "credential", with the
+ * scrypt hash in `password`. OAuth providers would add their own rows.
+ */
+export const accounts = pgTable(
+  "accounts",
+  {
+    id: id(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    password: text("password"),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
+    refreshTokenExpiresAt: timestamp("refresh_token_expires_at", { withTimezone: true }),
+    scope: text("scope"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("accounts_user_idx").on(t.userId)],
+);
+
+/** Short-lived tokens for email verification and password resets. */
+export const verifications = pgTable(
+  "verifications",
+  {
+    id: id(),
+    identifier: text("identifier").notNull(),
+    value: text("value").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("verifications_identifier_idx").on(t.identifier)],
 );
  
 // ---------- Clinics ----------
