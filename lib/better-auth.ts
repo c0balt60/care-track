@@ -18,6 +18,12 @@ export const auth = betterAuth({
     usePlural: true,
   }),
 
+  // Block sign-up over HTTP (POST /api/auth/sign-up/email returns 404). Every new account
+  // must go through the signUp server action, which validates the profile fields and
+  // creates the patients row. auth.api.signUpEmail() skips the HTTP router, so the
+  // action still works.
+  disabledPaths: ["/sign-up/email"],
+
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8, // matches the sign-up form's hint

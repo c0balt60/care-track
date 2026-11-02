@@ -46,7 +46,11 @@ export async function signUp(_prev: FormState, form: FormData): Promise<FormStat
   const dob = text(form, "dob");
   const phone = text(form, "phone");
   if (role === "patient") {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dob) || Number.isNaN(Date.parse(dob)) || new Date(dob) > new Date()) {
+    // JS rolls impossible dates forward ("2026-02-29" → March 1), so check that the
+    // parsed date converts back to exactly what was typed.
+    const born = new Date(dob);
+    const real = /^\d{4}-\d{2}-\d{2}$/.test(dob) && !Number.isNaN(born.getTime()) && born.toISOString().slice(0, 10) === dob;
+    if (!real || born > new Date()) {
       return { error: "Enter a valid date of birth." };
     }
     if (!phone || phone.length > 40) return { error: "Enter your phone number." };
@@ -72,8 +76,8 @@ export async function signUp(_prev: FormState, form: FormData): Promise<FormStat
     await db.transaction(async (tx) => {
       if (role !== "patient") await tx.update(users).set({ role }).where(eq(users.id, userId));
       if (role === "patient") await tx.insert(patients).values({ userId, name, dob, phone });
-      // TODO(onboarding): practitioner and clinic profiles need city, time zone, and slot
-      // length the form doesn't ask for yet, so their rows are created in a later step.
+      // TODO(onboarding): practitioner and clinic profiles need details the sign-up form
+      // doesn't ask for yet (see signup/page.tsx), so their rows are created in a later step.
     });
   } catch (err) {
     // Don't leave a half-made account behind: deleting the user cascades to its
