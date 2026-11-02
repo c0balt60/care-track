@@ -266,10 +266,6 @@ export const appointments = pgTable(
   (t) => [
     index("appointments_practitioner_start_idx").on(t.practitionerId, t.startsAt),
     index("appointments_patient_start_idx").on(t.patientId, t.startsAt),
-    // One live booking per slot. Declined/cancelled ones free the slot up again.
-    uniqueIndex("appointments_active_slot_unique")
-      .on(t.practitionerId, t.startsAt)
-      .where(sql`status IN ('pending', 'confirmed')`),
     check("appointments_status_check", oneOf("status", APPOINTMENT_STATUSES)),
     check("appointments_booked_by_check", oneOf("booked_by", BOOKED_BY)),
     check("appointments_cancelled_by_check", sql`cancelled_by IS NULL OR ${oneOf("cancelled_by", ROLES)}`),
