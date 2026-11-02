@@ -1,9 +1,9 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { appointmentsFor, type Viewer } from "@/lib/mock-data";
 import { MenuIcon, XIcon } from "./icons";
 import { NavLink } from "./nav-link";
 import { PreviewBar } from "./preview-bar";
+import { logOut } from "@/app/(auth)/actions";
 import { Logo } from "./ui";
 
 const roleLabel = { patient: "Patient", practitioner: "Practitioner", staff: "Clinic staff" };
@@ -34,9 +34,12 @@ function Nav({ viewer }: { viewer: Viewer }) {
       <div className="mt-auto border-t border-white/15 pt-4">
         <p className="px-3 font-medium">{viewer.name}</p>
         <p className="px-3 text-sm text-white/70">{roleLabel[viewer.role]}</p>
-        <Link href="/login" className="mt-2 flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-white/75 hover:bg-white/10 hover:text-white">
-          Log out
-        </Link>
+        {/* A form, not a link: logging out changes state, so it must be a POST. */}
+        <form action={logOut}>
+          <button type="submit" className="mt-2 flex min-h-11 w-full items-center rounded-lg px-3 text-sm font-medium text-white/75 hover:bg-white/10 hover:text-white">
+            Log out
+          </button>
+        </form>
       </div>
     </nav>
   );
