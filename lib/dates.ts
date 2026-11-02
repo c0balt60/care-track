@@ -18,13 +18,33 @@ function wallClock(date: Date, timeZone: string) {
   return { year: get("year"), month: get("month"), day: get("day"), hour: get("hour"), minute: get("minute") };
 }
 
-/** The moment a wall-clock time happens in a time zone, e.g. 9:30 on Oct 8 in New York. */
+/** How far a time zone's wall clock is ahead of UTC at this moment, in ms. */
+function offsetAt(time: number, timeZone: string) {
+  const w = wallClock(new Date(time), timeZone);
+  return Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute) - time;
+}
+
+/**
+ * The moment a wall-clock time happens in a time zone, e.g. 9:30 on Oct 8 in New York.
+ *
+ * Around daylight saving changes: a time that happens twice (1:30 on the fall-back
+ * night) gives the first one, and a time that never happens (2:30 on the
+ * spring-forward night) gives some nearby moment. Use `minuteOfDay` to check.
+ */
 export function zoned(day: DayKey, minutes: number, timeZone: string): Date {
   const [y, m, d] = day.split("-").map(Number);
   const guess = Date.UTC(y, m - 1, d, 0, minutes);
-  const w = wallClock(new Date(guess), timeZone);
-  const offset = Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute) - guess;
-  return new Date(guess - offset);
+  // The offset at `guess` can be on the wrong side of a DST change, so check it
+  // again at the moment we landed on and correct once if it differs.
+  const first = guess - offsetAt(guess, timeZone);
+  const second = guess - offsetAt(first, timeZone);
+  return new Date(second);
+}
+
+/** Minutes since midnight on the wall clock, e.g. 9:30 → 570. */
+export function minuteOfDay(date: Date, timeZone: string): number {
+  const w = wallClock(date, timeZone);
+  return w.hour * 60 + w.minute;
 }
 
 export function dayKey(date: Date, timeZone: string): DayKey {
