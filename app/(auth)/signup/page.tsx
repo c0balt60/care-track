@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Field, param } from "@/components/ui";
+import { SignupForm } from "./signup-form";
 
 const roles = {
   patient: { title: "I’m a patient", text: "Find open times and book appointments." },
@@ -45,8 +46,7 @@ export default async function Signup({ searchParams }: PageProps<"/signup">) {
       </p>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight">Create an account</h1>
 
-      {/* Prototype: posts to the dashboard. The real form calls the team's sign-up action. */}
-      <form method="post" action="/dashboard" className="mt-6 space-y-4">
+      <SignupForm as={as} next={next}>
         <Field label="Full name" id="name" autoComplete="name" required />
         <Field label="Email" id="email" type="email" autoComplete="email" required />
         <Field label="Password" id="password" type="password" autoComplete="new-password" minLength={8} required hint="At least 8 characters." />
@@ -77,8 +77,7 @@ export default async function Signup({ searchParams }: PageProps<"/signup">) {
           </fieldset>
         )}
 
-        <button className="btn btn-primary w-full">Create account</button>
-      </form>
+      </SignupForm>
       {login}
     </div>
   );
