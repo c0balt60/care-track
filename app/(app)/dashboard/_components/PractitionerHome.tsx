@@ -2,11 +2,11 @@ import Link from "next/link";
 import { AppointmentCard, RequestActions } from "@/components/appointment-card";
 import { Notice, PageHeader, StatusBadge } from "@/components/ui";
 import { formatDay, formatDayKey, formatTime, formatWhen } from "@/lib/dates";
-import { agendaFor, appointmentsFor, getAppointment, getPatient, getPractitioner, slotsFor, today, type Viewer } from "@/lib/mock-data";
+import { agendaFor, appointmentsFor, getAppointment, getPatient, getPractitioner, slotsFor, today, type DemoViewer } from "@/lib/mock-data";
 import StatCard from "./StatCard";
 
 export default function PractitionerHome({ viewer, done, notice }: {
-    viewer: Extract<Viewer, { role: "practitioner" }>;
+    viewer: Extract<DemoViewer, { role: "practitioner" }>;
     done?: string;
     notice?: string;
 }) {

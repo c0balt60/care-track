@@ -1,23 +1,24 @@
 import Link from "next/link";
 import { Field, Notice, noticeText, PageHeader, param } from "@/components/ui";
-import { getPractitioner } from "@/lib/mock-data";
+import { demoViewer, getPractitioner } from "@/lib/mock-data";
 import { patientDetailErrors } from "@/lib/patient-details";
 import { practitionerProfileErrors } from "@/lib/practitioner-profile";
 import { updatePatientDetails, updatePractitionerProfile } from "./actions";
 import { getCurrentPatient } from "./current-patient";
 import { getCurrentPractitioner } from "./current-practitioner";
-import { getViewer } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 
 export default async function Settings({ searchParams }: PageProps<"/settings">) {
-  const viewer = await getViewer();
+  const viewer = await requireRole("patient", "practitioner", "staff");
   const sp = await searchParams;
-  if (!viewer) return null;
 
   const patient = viewer.role === "patient" ? await getCurrentPatient() : null;
-  const p = viewer.role === "practitioner" ? getPractitioner(viewer.practitionerId) : undefined;
+  // Prototype: the photo and public-profile link still come from the demo practitioner.
+  const demo = demoViewer(viewer);
+  const p = demo.role === "practitioner" ? getPractitioner(demo.practitionerId) : undefined;
   const profile = p ? await getCurrentPractitioner() : null;
   const action = patient ? updatePatientDetails : profile ? updatePractitionerProfile : null;
-  const email = `${viewer.name.replace(/^Dr\.\s*/, "").toLowerCase().replace(/\s+/g, ".")}@example.com`;
+  const email = viewer.email;
   const notice = noticeText({ saved: "Changes saved." }, param(sp.notice));
   const error = noticeText({ ...patientDetailErrors, ...practitionerProfileErrors }, param(sp.error));
 

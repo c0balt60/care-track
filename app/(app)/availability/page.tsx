@@ -1,11 +1,10 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PlusIcon } from "@/components/icons";
 import { Field, Notice, noticeText, PageHeader, param } from "@/components/ui";
 import { addDays, dayKey, formatDayKey, formatZone } from "@/lib/dates";
-import { getViewer } from "@/lib/auth";
-import { getPractitioner, slotsFor, today } from "@/lib/mock-data";
+import { requireRole } from "@/lib/auth";
+import { demoViewer, getPractitioner, slotsFor, today } from "@/lib/mock-data";
 
 const days: [number, string][] = [[1, "Monday"], [2, "Tuesday"], [3, "Wednesday"], [4, "Thursday"], [5, "Friday"], [6, "Saturday"], [0, "Sunday"]];
 
@@ -16,10 +15,8 @@ const t12 = (hhmm: string) =>
 const option = "flex cursor-pointer items-start gap-3 rounded-lg border border-line p-3 has-checked:border-accent has-checked:bg-accent-soft";
 
 export default async function Availability({ searchParams }: PageProps<"/availability">) {
-  const viewer = await getViewer();
+  const viewer = demoViewer(await requireRole("practitioner"));
   const sp = await searchParams;
-  if (!viewer) return null;
-  if (viewer.role !== "practitioner") notFound();
 
   const p = getPractitioner(viewer.practitionerId)!;
   const zone = formatZone(new Date(), p.timeZone);

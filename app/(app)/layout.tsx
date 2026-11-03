@@ -1,30 +1,14 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import { EmptyState, Logo } from "@/components/ui";
-import { UserIcon } from "@/components/icons";
-import { PreviewBar } from "@/components/preview-bar";
 import { getViewer } from "@/lib/auth";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const viewer = await getViewer();
 
-  // The real app redirects in proxy.ts instead (see the auth note in the outline).
-  if (!viewer) {
-    return (
-      <>
-        <PreviewBar role="out" />
-        <main id="main" className="mx-auto flex w-full max-w-md flex-1 flex-col items-center gap-6 px-4 py-16">
-          <Logo />
-          <EmptyState
-            icon={<UserIcon />}
-            title="Log in to continue"
-            text="In the real app, signed-out visitors go to Log in and come back here afterward. Pick a role in the bar above to preview this page."
-            action={<Link href="/login" className="btn btn-primary">Log in</Link>}
-          />
-        </main>
-      </>
-    );
-  }
+  // Pages check access themselves with requireRole(); this only keeps the shell
+  // from rendering for signed-out visitors. Coming back to the page after log-in
+  // (?next=) is AUTH-3 (#13), done in proxy.ts.
+  if (!viewer) redirect("/login");
 
   return <AppShell viewer={viewer}>{children}</AppShell>;
 }

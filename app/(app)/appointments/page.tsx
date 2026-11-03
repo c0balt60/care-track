@@ -3,8 +3,8 @@ import { AppointmentCard, RequestActions } from "@/components/appointment-card";
 import { CalendarIcon } from "@/components/icons";
 import { EmptyState, Notice, PageHeader, param } from "@/components/ui";
 import { dayKey, formatDayKey } from "@/lib/dates";
-import { getViewer } from "@/lib/auth";
-import { type Appointment, appointmentsFor, getPatient, getAppointment, isUpcoming, practitioners } from "@/lib/mock-data";
+import { requireRole } from "@/lib/auth";
+import { type Appointment, appointmentsFor, demoViewer, getPatient, getAppointment, isUpcoming, practitioners } from "@/lib/mock-data";
 
 const tabs = {
   upcoming: { label: "Upcoming", empty: "No upcoming appointments", match: (a: Appointment) => a.status === "confirmed" && isUpcoming(a) },
@@ -15,9 +15,8 @@ const tabs = {
 type Tab = keyof typeof tabs;
 
 export default async function Appointments({ searchParams }: PageProps<"/appointments">) {
-  const viewer = await getViewer();
+  const viewer = demoViewer(await requireRole("patient", "practitioner", "staff"));
   const sp = await searchParams;
-  if (!viewer) return null;
 
   const s = param(sp.status) ?? "";
   const status: Tab = Object.hasOwn(tabs, s) ? (s as Tab) : "upcoming";

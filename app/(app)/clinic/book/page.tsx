@@ -1,13 +1,10 @@
-import { notFound } from "next/navigation";
 import { PractitionerCard } from "@/components/practitioner-card";
 import { PageHeader } from "@/components/ui";
-import { getViewer } from "@/lib/auth";
-import { getClinic, practitioners } from "@/lib/mock-data";
+import { requireRole } from "@/lib/auth";
+import { demoViewer, getClinic, practitioners } from "@/lib/mock-data";
 
 export default async function ClinicBook() {
-  const viewer = await getViewer();
-  if (!viewer) return null;
-  if (viewer.role !== "staff") notFound();
+  const viewer = demoViewer(await requireRole("staff"));
 
   const clinic = getClinic(viewer.clinicId)!;
 

@@ -1,17 +1,25 @@
 import type { ReactNode } from "react";
-import { appointmentsFor, type Viewer } from "@/lib/mock-data";
+import { hasProfile, type Viewer } from "@/lib/auth";
+import { appointmentsFor, demoViewer } from "@/lib/mock-data";
 import { MenuIcon, XIcon } from "./icons";
 import { NavLink } from "./nav-link";
-import { PreviewBar } from "./preview-bar";
+import { PrototypeNotice } from "./prototype-notice";
 import { logOut } from "@/app/(auth)/actions";
 import { Logo } from "./ui";
 
-const roleLabel = { patient: "Patient", practitioner: "Practitioner", staff: "Clinic staff" };
+const roleLabel = { patient: "Patient", practitioner: "Practitioner", staff: "Clinic staff", admin: "Admin" };
 
+// The links only decide what's shown; each page checks access itself with requireRole().
 function Nav({ viewer }: { viewer: Viewer }) {
-  const pending = appointmentsFor(viewer).filter((a) => a.status === "pending").length;
+  // Prototype: the pending count comes from the demo practitioner's appointments.
+  const pending =
+    viewer.role === "practitioner" && hasProfile(viewer)
+      ? appointmentsFor(demoViewer(viewer)).filter((a) => a.status === "pending").length
+      : 0;
   const items: [label: string, href: string][] =
-    viewer.role === "patient" ? [["Home", "/dashboard"], ["Find care", "/search"], ["Appointments", "/appointments"], ["Settings", "/settings"]]
+    // Admins, and accounts without their profile row, only have the dashboard for now.
+    viewer.role === "admin" || !hasProfile(viewer) ? [["Home", "/dashboard"]]
+    : viewer.role === "patient" ? [["Home", "/dashboard"], ["Find care", "/search"], ["Appointments", "/appointments"], ["Settings", "/settings"]]
     : viewer.role === "practitioner" ? [["Today", "/dashboard"], ["Appointments", "/appointments"], ["Availability", "/availability"], ["Settings", "/settings"]]
     : [["Clinic today", "/dashboard"], ["Book for a patient", "/clinic/book"], ["Appointments", "/appointments"], ["Clinic", "/clinic"], ["Settings", "/settings"]];
 
@@ -55,7 +63,7 @@ export function AppShell({ viewer, children }: { viewer: Viewer; children: React
       </aside>
 
       <div className="min-w-0 flex-1">
-        <PreviewBar role={viewer.role} />
+        <PrototypeNotice />
         <header className="panel-dark sticky top-0 z-10 flex h-16 items-center justify-between px-4 lg:hidden">
           <Logo href="/dashboard" />
           <button type="button" popoverTarget="app-menu" className="btn btn-ghost">

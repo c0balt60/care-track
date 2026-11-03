@@ -1,16 +1,12 @@
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { practitioners, users } from "@/lib/db/schema";
-import { getViewer } from "@/lib/auth";
+import { practitioners } from "@/lib/db/schema";
+import { getViewerAs } from "@/lib/auth";
 
-/** The practitioners row for whoever is signed in, or null. */
+/** The practitioners row for whoever is signed in, or null if they aren't a practitioner. */
 export async function getCurrentPractitioner() {
-  const viewer = await getViewer();
-  if (viewer?.role !== "practitioner") return null;
-
-  // ponytail: TEMPORARY mock auth, same as current-patient.ts. Match the mock viewer to a users row by
-  // email ("Dr. Sam Rivera" -> sam.rivera@example.com). Replace with the session's user id once Better Auth (#11) lands.
-  const email = `${viewer.name.replace(/^Dr\.\s*/, "").toLowerCase().replace(/\s+/g, ".")}@example.com`;
+  const viewer = await getViewerAs("practitioner");
+  if (!viewer) return null;
 
   const [row] = await db
     .select({
@@ -21,8 +17,7 @@ export async function getCurrentPractitioner() {
       bio: practitioners.bio,
     })
     .from(practitioners)
-    .innerJoin(users, eq(users.id, practitioners.userId))
-    .where(eq(sql`lower(${users.email})`, email))
+    .where(eq(practitioners.id, viewer.practitionerId))
     .limit(1);
   return row ?? null;
 }

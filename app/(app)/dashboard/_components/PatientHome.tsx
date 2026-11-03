@@ -2,9 +2,9 @@ import Link from "next/link";
 import { AppointmentCard, CancelDialog } from "@/components/appointment-card";
 import { CalendarIcon, SearchIcon } from "@/components/icons";
 import { EmptyState, PageHeader } from "@/components/ui";
-import { appointmentsFor, isUpcoming, type Viewer } from "@/lib/mock-data";
+import { appointmentsFor, type DemoViewer, isUpcoming } from "@/lib/mock-data";
 
-export default function PatientHome({ viewer }: { viewer: Extract<Viewer, { role: "patient" }> }) {
+export default function PatientHome({ viewer }: { viewer: Extract<DemoViewer, { role: "patient" }> }) {
     const upcoming = appointmentsFor(viewer)
         .filter(isUpcoming)
         .sort((a, b) => a.start.getTime() - b.start.getTime());
