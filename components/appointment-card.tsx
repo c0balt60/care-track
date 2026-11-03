@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { formatWhen } from "@/lib/dates";
-import { type Appointment, getClinic, getPatient, getPractitioner, type Viewer } from "@/lib/mock-data";
+import { type Appointment, type DemoViewer as Viewer, getClinic, getPatient, getPractitioner } from "@/lib/mock-data";
 import { ConfirmDialog } from "./confirm-dialog";
 import { StatusBadge } from "./ui";
 

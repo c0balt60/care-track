@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/ui";
 import { formatDayKey, formatTime, weekday } from "@/lib/dates";
-import { agendaFor, getClinic, getPatient, practitioners, today, type Viewer } from "@/lib/mock-data";
+import { agendaFor, type DemoViewer, getClinic, getPatient, practitioners, today } from "@/lib/mock-data";
 
-export default function StaffHome({ viewer }: { viewer: Extract<Viewer, { role: "staff" }> }) {
+export default function StaffHome({ viewer }: { viewer: Extract<DemoViewer, { role: "staff" }> }) {
     const clinic = getClinic(viewer.clinicId)!;
     const day = today(clinic.timeZone);
     const team = practitioners.filter((p) => p.clinicId === clinic.id);

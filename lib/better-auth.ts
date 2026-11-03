@@ -1,8 +1,9 @@
 // Better Auth setup: email + password accounts, sessions stored in the database
 // and identified by an httpOnly cookie. Docs: https://www.better-auth.com/docs
 //
-// Named better-auth.ts (not auth.ts) because lib/auth.ts already holds
-// getViewer/requireRole, which switch over to this in AUTH-2 (#12).
+// Named better-auth.ts (not auth.ts) because lib/auth.ts holds getViewer/requireRole,
+// which read the session from here. To check who is signed in or what they may open,
+// use lib/auth.ts: it also checks the role's profile row, which a bare session doesn't.
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";

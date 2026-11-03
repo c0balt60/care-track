@@ -4,16 +4,16 @@ import { CancelDialog, RequestActions, statusNote } from "@/components/appointme
 import { ArrowLeftIcon } from "@/components/icons";
 import { Notice, param, StatusBadge } from "@/components/ui";
 import { formatDay, formatWhen } from "@/lib/dates";
-import { getViewer } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import {
-  type Appointment, getAppointment, getClinic, getPatient, getPractitioner, involves, isUpcoming, previewBooking,
+  type Appointment, demoViewer, getAppointment, getClinic, getPatient, getPractitioner, involves, isUpcoming, previewBooking,
 } from "@/lib/mock-data";
 
 export default async function AppointmentDetail({ params, searchParams }: PageProps<"/appointments/[id]">) {
-  const viewer = await getViewer();
+  // Staff can pass ?patient= below, so only staff linked to a clinic get this far.
+  const viewer = demoViewer(await requireRole("patient", "practitioner", "staff"));
   const { id } = await params;
   const sp = await searchParams;
-  if (!viewer) return null;
 
   // Prototype: "new_<slotId>" is the appointment the book page just "created",
   // rebuilt from the URL. ?from= is the appointment being rescheduled.

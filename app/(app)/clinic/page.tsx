@@ -1,24 +1,21 @@
 import { eq } from "drizzle-orm";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PlusIcon } from "@/components/icons";
 import { Field, Notice, noticeText, PageHeader, param } from "@/components/ui";
-import { getViewer } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import { clinicProfileErrors } from "@/lib/clinic-profile";
 import { db } from "@/lib/db";
 import { practitioners } from "@/lib/db/schema";
-import { getPractitioner, invites, practitioners as mockPractitioners } from "@/lib/mock-data";
+import { demoViewer, getPractitioner, invites, practitioners as mockPractitioners } from "@/lib/mock-data";
 import { removePractitioner, updateClinicProfile } from "./actions";
 import { getCurrentClinic } from "./current-clinic";
 
 const pill = "inline-flex rounded-full px-2.5 py-0.5 text-sm font-medium";
 
 export default async function ClinicSettings({ searchParams }: PageProps<"/clinic">) {
-  const viewer = await getViewer();
+  const viewer = await requireRole("staff");
   const sp = await searchParams;
-  if (!viewer) return null;
-  if (viewer.role !== "staff") notFound();
 
   const clinic = await getCurrentClinic();
   if (!clinic) return <p role="alert" className="card p-5">{clinicProfileErrors["no-clinic"]}</p>;
@@ -29,7 +26,8 @@ export default async function ClinicSettings({ searchParams }: PageProps<"/clini
     .where(eq(practitioners.clinicId, clinic.id))
     .orderBy(practitioners.name);
   // ponytail: TEMPORARY. Invites have no table yet (no email service), so they stay mock data.
-  const invited = invites.filter((i) => i.clinicId === viewer.clinicId);
+  // Prototype: invites are still mock data, keyed by the demo clinic id.
+  const invited = invites.filter((i) => i.clinicId === demoViewer(viewer).clinicId);
   // ponytail: TEMPORARY. /practitioners/[id] still takes mock ids, so link by matching names.
   const profileHref = (name: string) => {
     const mock = mockPractitioners.find((m) => m.name === name);

@@ -3,18 +3,18 @@ import { notFound } from "next/navigation";
 import { ArrowLeftIcon, CalendarIcon, ClockIcon, InfoIcon, MapPinIcon } from "@/components/icons";
 import { EmptyState, PageHeader, param } from "@/components/ui";
 import { formatWhen } from "@/lib/dates";
-import { getViewer } from "@/lib/auth";
-import { getAppointment, getClinic, getPractitioner, getSlot } from "@/lib/mock-data";
+import { requireRole } from "@/lib/auth";
+import { demoViewer, getAppointment, getClinic, getPractitioner, getSlot } from "@/lib/mock-data";
 import PatientPicker from "./_components/PatientPicker";
 
 export default async function Book({ params, searchParams }: PageProps<"/book/[slotId]">) {
-  const viewer = await getViewer();
+  // Patients book for themselves, staff for a patient. Practitioners don't book.
+  const viewer = demoViewer(await requireRole("patient", "staff"));
   const { slotId } = await params;
   const sp = await searchParams;
-  if (!viewer) return null;
 
   const p = getPractitioner(slotId.split("_")[0]);
-  if (!p || viewer.role === "practitioner") notFound();
+  if (!p) notFound();
 
   const tz = p.timeZone;
   const slot = getSlot(slotId);

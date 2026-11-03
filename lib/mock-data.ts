@@ -54,10 +54,27 @@ export type Appointment = {
   history: { label: string; at: Date }[];
 };
 
-export type Viewer =
+/** The demo person whose mock data a page shows. Not the signed-in user: that's Viewer in lib/auth.ts. */
+export type DemoViewer =
   | { role: "patient"; name: string; patientId: string }
   | { role: "practitioner"; name: string; practitionerId: string }
   | { role: "staff"; name: string; clinicId: string };
+
+/**
+ * TEMPORARY: remove in CMP-4 (#42). Pages still on mock data need mock ids
+ * ("jordan", "rivera", "northside"), so this maps a real signed-in user to the
+ * demo person for their role, keeping their real name. It only picks which demo
+ * data to show. It is never used to decide who someone is or what they may open:
+ * call it after requireRole() in lib/auth.ts.
+ */
+export function demoViewer<R extends Role>(viewer: { role: R; name: string }): Extract<DemoViewer, { role: R }> {
+  const demo: DemoViewer =
+    viewer.role === "patient" ? { role: "patient", name: viewer.name, patientId: "jordan" }
+    : viewer.role === "practitioner" ? { role: "practitioner", name: viewer.name, practitionerId: "rivera" }
+    : { role: "staff", name: viewer.name, clinicId: "northside" };
+  // Same role in, same role out; TypeScript can't follow that through the ternary.
+  return demo as Extract<DemoViewer, { role: R }>;
+}
 
 const TZ = "America/New_York";
 
@@ -273,12 +290,12 @@ export function agendaFor(p: Practitioner, day: DayKey): { start: Date; appointm
 export const isUpcoming = (a: Appointment) => a.end.getTime() > Date.now();
 
 /** Whether the viewer may see this appointment. The real app checks this on the server. */
-export const involves = (viewer: Viewer, a: Appointment) =>
+export const involves = (viewer: DemoViewer, a: Appointment) =>
   viewer.role === "patient" ? a.patientId === viewer.patientId
   : viewer.role === "practitioner" ? a.practitionerId === viewer.practitionerId
   : getPractitioner(a.practitionerId)?.clinicId === viewer.clinicId;
 
-export const appointmentsFor = (viewer: Viewer) => appointments().filter((a) => involves(viewer, a));
+export const appointmentsFor = (viewer: DemoViewer) => appointments().filter((a) => involves(viewer, a));
 
 /**
  * The appointment that "Book" would create. The real app creates it in the
