@@ -18,7 +18,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
     if (viewer.role === "admin") return <AdminHome name={viewer.name} />;
 
     if (!hasProfile(viewer)) {
-        const linkedTo = viewer.role === "staff" ? "a clinic" : "a practitioner profile";
+        const linkedTo = { patient: "a patient profile", practitioner: "a practitioner profile", staff: "a clinic" }[viewer.role];
         return (
             <EmptyState
                 icon={<UserIcon />}

@@ -4,7 +4,8 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { patients, practitioners } from "@/lib/db/schema";
+import { getViewerAs } from "@/lib/auth";
+import { patients, practitioners, users } from "@/lib/db/schema";
 import { parsePatientDetails } from "@/lib/patient-details";
 import { parsePractitionerProfile } from "@/lib/practitioner-profile";
 import { getCurrentPatient } from "./current-patient";
@@ -13,13 +14,19 @@ import { getCurrentPractitioner } from "./current-practitioner";
 /** Saves the signed-in patient's name, DOB, and phone from the /settings form. */
 export async function updatePatientDetails(formData: FormData) {
   // Identify the patient on the server. Never trust an id sent in the form.
+  const viewer = await getViewerAs("patient");
   const patient = await getCurrentPatient();
-  if (!patient) redirect("/settings?error=no-patient");
+  if (!viewer || !patient) redirect("/settings?error=no-patient");
 
   const parsed = parsePatientDetails(formData);
   if (!parsed.ok) redirect(`/settings?error=${parsed.error}`);
 
-  await db.update(patients).set(parsed.data).where(eq(patients.id, patient.id));
+  // The name lives in two rows: patients.name (the profile) and users.name (the
+  // account, which the session and sidebar read). Update both or neither.
+  await db.transaction(async (tx) => {
+    await tx.update(patients).set(parsed.data).where(eq(patients.id, patient.id));
+    await tx.update(users).set({ name: parsed.data.name }).where(eq(users.id, viewer.userId));
+  });
 
   revalidatePath("/settings");
   redirect("/settings?notice=saved");

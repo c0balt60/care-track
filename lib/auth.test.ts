@@ -2,7 +2,7 @@
 // getViewer reads the Better Auth session (mocked here) and then queries the real
 // schema. The DB is an in-memory Postgres (PGlite) with the real migrations, like
 // lib/db/no-overlap.test.ts, so the profile lookups run as real SQL.
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import * as schema from "@/lib/db/schema";
 
 // `server-only` throws on import outside a React Server environment, and tests aren't one.
@@ -81,6 +81,11 @@ beforeAll(async () => {
   await db.insert(schema.clinicStaff).values({ clinicId: clinic.id, userId: staffUser });
 
   Object.assign(ids, { patient: patient.id, practitioner: practitioner.id, clinic: clinic.id });
+});
+
+afterAll(async () => {
+  // Same cleanup as lib/db/no-overlap.test.ts. $client is the PGlite instance behind drizzle.
+  await (db as unknown as { $client: { close(): Promise<void> } }).$client.close();
 });
 
 beforeEach(() => {
