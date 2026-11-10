@@ -29,6 +29,13 @@
       "when": 1793662243956,
       "tag": "0003_appointment_no_overlap",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794340975932,
+      "tag": "0004_audit_log",
+      "breakpoints": true
     }
   ]
 }
