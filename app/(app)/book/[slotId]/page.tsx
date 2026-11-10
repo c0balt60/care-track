@@ -1,38 +1,54 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { ArrowLeftIcon, CalendarIcon, ClockIcon, InfoIcon, MapPinIcon } from "@/components/icons";
 import { EmptyState, PageHeader, param } from "@/components/ui";
 import { formatWhen } from "@/lib/dates";
 import { requireRole } from "@/lib/auth";
-import { demoViewer, getAppointment, getClinic, getPractitioner, getSlot } from "@/lib/mock-data";
-import PatientPicker from "./_components/PatientPicker";
+import { bookingErrors, loadBookableSlot, type BookingError } from "@/lib/booking";
+import { bookAppointment } from "./actions";
 
+// Patients book for themselves here. Not yet on real data: staff booking for a
+// patient (SCH-6 #24) and rescheduling (SCH-5 #23).
 export default async function Book({ params, searchParams }: PageProps<"/book/[slotId]">) {
-  // Patients book for themselves, staff for a patient. Practitioners don't book.
-  const viewer = demoViewer(await requireRole("patient", "staff"));
+  const viewer = await requireRole("patient", "staff");
   const { slotId } = await params;
   const sp = await searchParams;
+  const notice = param(sp.notice);
+  const error = param(sp.error);
+  const message = error && Object.hasOwn(bookingErrors, error) ? bookingErrors[error as BookingError] : null;
 
-  const p = getPractitioner(slotId.split("_")[0]);
-  if (!p) notFound();
-
-  const tz = p.timeZone;
-  const slot = getSlot(slotId);
-  const old = viewer.role === "patient" ? getAppointment(param(sp.reschedule) ?? "") : undefined;
-  const back = `/practitioners/${p.id}${old ? `?reschedule=${old.id}` : ""}`;
+  // ponytail: practitioner pages are still on mock data (SCH-3 #21), so "back" goes to search.
+  const back = "/search";
   const backLink = (
     <Link href={back} className="link mb-4 inline-flex min-h-11 items-center gap-1 text-sm">
-      <ArrowLeftIcon width={16} height={16} /> Back to {p.name}
+      <ArrowLeftIcon width={16} height={16} /> Back to search
     </Link>
   );
 
-  if (!slot) {
+  if (notice === "booked" || notice === "requested") {
+    return (
+      <div className="mx-auto max-w-xl">
+        <EmptyState
+          icon={<CalendarIcon />}
+          title={notice === "booked" ? "You're booked" : "Request sent"}
+          text={
+            notice === "booked"
+              ? "Your appointment is confirmed."
+              : "The practitioner reviews requests first. You'll see it confirmed in your appointments once they accept."
+          }
+          action={<Link href="/appointments" className="btn btn-primary">See my appointments</Link>}
+        />
+      </div>
+    );
+  }
+
+  const found = await loadBookableSlot(slotId);
+  if (!found || found.taken) {
     return (
       <div className="mx-auto max-w-xl">
         {backLink}
         <EmptyState
           icon={<ClockIcon />}
-          title="Someone just booked this time"
+          title={found?.taken ? "Someone just booked this time" : "This time isn't available"}
           text="Pick another time. Openings update as people book."
           action={<Link href={back} className="btn btn-primary">See other times</Link>}
         />
@@ -40,22 +56,16 @@ export default async function Book({ params, searchParams }: PageProps<"/book/[s
     );
   }
 
-  const staff = viewer.role === "staff";
+  const { practitioner: p, clinic, slot } = found;
+  const tz = p.timeZone;
   const approval = p.bookingMode === "approval";
-  const clinic = getClinic(p.clinicId);
 
   return (
     <div className="mx-auto max-w-xl">
       {backLink}
-      <PageHeader title={old ? "Confirm your new time" : staff ? "Book for a patient" : "Confirm your appointment"} />
+      <PageHeader title={viewer.role === "staff" ? "Book for a patient" : "Confirm your appointment"} />
 
       <div className="card space-y-1 p-4 sm:p-5">
-        {old && (
-          <p className="text-muted">
-            <del>{formatWhen(old.start, tz)}</del>
-            <span className="sr-only"> moves to</span>
-          </p>
-        )}
         <p className="flex items-center gap-2 text-lg font-semibold">
           <CalendarIcon className="text-accent" />
           <time dateTime={slot.start.toISOString()}>{formatWhen(slot.start, tz)}</time>
@@ -67,31 +77,34 @@ export default async function Book({ params, searchParams }: PageProps<"/book/[s
         </p>
       </div>
 
-      {staff && <PatientPicker q={param(sp.q)} />}
+      {message && (
+        <p role="alert" className="mt-6 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+          {message}
+        </p>
+      )}
 
-      {/* Prototype: a GET form that "creates" a fake appointment. The real form posts to the team's booking action. */}
-      <form id="book" action={`/appointments/new_${slotId}`} className="mt-6 space-y-4">
-        {old && <input type="hidden" name="from" value={old.id} />}
-        {viewer.role === "patient" && (
+      {viewer.role === "staff" ? (
+        <p className="mt-6 flex items-start gap-2 text-sm text-muted">
+          <InfoIcon className="mt-px shrink-0 text-blue-700" width={18} height={18} />
+          {bookingErrors.staff}
+        </p>
+      ) : (
+        <form action={bookAppointment.bind(null, slotId)} className="mt-6 space-y-4">
           <p className="text-sm text-muted">
             Booking as {viewer.name}. Your date of birth and phone come from your{" "}
             <Link href="/settings" className="link">account</Link>.
           </p>
-        )}
-        <div>
-          <label htmlFor="reason" className="label">Reason for visit</label>
-          <textarea id="reason" name="reason" rows={3} required defaultValue={old?.reason} className="input" aria-describedby="mode" />
-        </div>
-        <p id="mode" className="flex items-start gap-2 text-sm text-muted">
-          <InfoIcon className="mt-px shrink-0 text-blue-700" width={18} height={18} />
-          {!approval ? "This time is confirmed right away."
-            : old ? `${p.name} reviews requests first. You keep your current time until the new one is accepted.`
-            : `${p.name} reviews requests before confirming.`}
-        </p>
-        <button className="btn btn-primary w-full">
-          {old ? "Confirm new time" : staff ? "Book" : approval ? "Request appointment" : "Book appointment"}
-        </button>
-      </form>
+          <div>
+            <label htmlFor="reason" className="label">Reason for visit</label>
+            <textarea id="reason" name="reason" rows={3} required maxLength={1000} className="input" aria-describedby="mode" />
+          </div>
+          <p id="mode" className="flex items-start gap-2 text-sm text-muted">
+            <InfoIcon className="mt-px shrink-0 text-blue-700" width={18} height={18} />
+            {approval ? `${p.name} reviews requests before confirming.` : "This time is confirmed right away."}
+          </p>
+          <button className="btn btn-primary w-full">{approval ? "Request appointment" : "Book appointment"}</button>
+        </form>
+      )}
     </div>
   );
 }
