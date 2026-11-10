@@ -5,6 +5,7 @@ import {
     date, 
     index, 
     integer,
+    jsonb,
     pgTable,
     primaryKey,
     smallint,
@@ -323,5 +324,37 @@ export const payments = pgTable(
     check("payments_status_check", oneOf("status", PAYMENT_STATUSES)),
     check("payments_amount_check", sql`${t.amountCents} >= 0`),
     check("payments_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+  ],
+);
+
+// ---------- Audit ----------
+
+/**
+ * Who did what to which record. Append-only: a trigger in the migration rejects
+ * UPDATE and DELETE. Write rows with audit() from lib/audit.ts.
+ *
+ * actor_id has no foreign key on purpose. An FK would need ON DELETE SET NULL,
+ * which is an UPDATE the trigger blocks, so deleting a user would fail. It also
+ * keeps the history intact after the user is gone.
+ */
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: id(),
+    /** The user who acted. Null for system actions (jobs, the seed script). */
+    actorId: uuid("actor_id"),
+    /** What happened, as "entity.verb": "appointment.cancel", "practitioner.update". */
+    action: text("action").notNull(),
+    /** The table name of the thing acted on: "appointments", "users". */
+    entity: text("entity").notNull(),
+    /** Text so it fits any id type. */
+    entityId: text("entity_id").notNull(),
+    /** What changed, e.g. { status: { from: "pending", to: "confirmed" } }. */
+    diff: jsonb("diff"),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("audit_log_entity_idx").on(t.entity, t.entityId, t.at),
+    index("audit_log_actor_idx").on(t.actorId, t.at),
   ],
 );
