@@ -36,3 +36,13 @@ export async function audit(
   const [row] = await tx.insert(auditLog).values({ actorId, action, entity, entityId, diff }).returning();
   return row;
 }
+
+/**
+ * A diff that names the fields that changed but leaves their values out, for
+ * patient details: the audit log shouldn't become a second copy of them.
+ */
+export function redactedDiff<T extends Record<string, unknown>>(before: T, after: Partial<T>): AuditDiff | null {
+  const changed = Object.keys(after).filter((k) => before[k] !== after[k]);
+  if (!changed.length) return null;
+  return Object.fromEntries(changed.map((k) => [k, { from: "[redacted]", to: "[redacted]" }]));
+}

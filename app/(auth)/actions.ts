@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { isAPIError } from "better-auth/api";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { audit } from "@/lib/audit";
 import { auth } from "@/lib/better-auth";
 import { db } from "@/lib/db";
 import { patients, users } from "@/lib/db/schema";
@@ -73,9 +74,15 @@ export async function signUp(_prev: FormState, form: FormData): Promise<FormStat
   }
 
   try {
+    // Audit rows go in the same transaction, so a failed log undoes the change (AUD-2 #15).
     await db.transaction(async (tx) => {
-      if (role !== "patient") await tx.update(users).set({ role }).where(eq(users.id, userId));
-      if (role === "patient") await tx.insert(patients).values({ userId, name, dob, phone });
+      if (role === "patient") {
+        const [patient] = await tx.insert(patients).values({ userId, name, dob, phone }).returning({ id: patients.id });
+        await audit(userId, "patient.create", "patients", patient.id, null, tx);
+      } else {
+        await tx.update(users).set({ role }).where(eq(users.id, userId));
+        await audit(userId, "user.role_change", "users", userId, { role: { from: "patient", to: role } }, tx);
+      }
       // TODO(onboarding): practitioner and clinic profiles need details the sign-up form
       // doesn't ask for yet (see signup/page.tsx), so their rows are created in a later step.
     });
