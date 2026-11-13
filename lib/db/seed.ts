@@ -39,6 +39,24 @@ function eventType(label: string): (typeof schema.APPOINTMENT_EVENT_TYPES)[numbe
   if ((schema.APPOINTMENT_EVENT_TYPES as readonly string[]).includes(type)) return type as never;
   throw new Error(`Unknown history label in mock data: "${label}"`);
 }
+
+/**
+ * Who did each seeded event, by role. The history page reads a "confirmed" event
+ * with no role as instant mode confirming on its own, and mock history only has
+ * "Confirmed" for approval-mode practitioners, so those must carry a role.
+ */
+function seedActorRole(
+  type: (typeof schema.APPOINTMENT_EVENT_TYPES)[number],
+  a: mock.Appointment,
+): (typeof schema.ROLES)[number] | null {
+  switch (type) {
+    case "booked": return a.bookedBy === "staff" ? "staff" : "patient";
+    case "confirmed":
+    case "declined": return "practitioner";
+    case "cancelled": return a.cancelledBy ?? null;
+    default: return null;
+  }
+}
  
 /** The people the prototype's role switcher signs in as, plus an admin. */
 const seedUsers = [
@@ -162,12 +180,10 @@ async function main() {
  
       if (a.history.length) {
         await tx.insert(schema.appointmentEvents).values(
-          a.history.map((h) => ({
-            appointmentId: row.id,
-            type: eventType(h.label),
-            actorRole: h.label === "Booked by front desk" ? ("staff" as const) : null,
-            at: h.at,
-          })),
+          a.history.map((h) => {
+            const type = eventType(h.label);
+            return { appointmentId: row.id, type, actorRole: seedActorRole(type, a), at: h.at };
+          }),
         );
       }
     }

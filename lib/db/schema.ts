@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
+    type AnyPgColumn,
+    bigint,
     boolean,
     check,
     date, 
@@ -30,7 +32,7 @@ export const USER_ROLES = [...ROLES, "admin"] as const;
 export const APPOINTMENT_STATUSES = ["pending", "confirmed", "declined", "cancelled", "completed"] as const;
 export const BOOKING_MODES = ["instant", "approval"] as const;
 export const BOOKED_BY = ["patient", "staff"] as const;
-export const APPOINTMENT_EVENT_TYPES = ["booked", "confirmed", "declined", "cancelled", "completed"] as const;
+export const APPOINTMENT_EVENT_TYPES = ["booked", "confirmed", "declined", "cancelled", "completed", "rescheduled"] as const;
 export const PAYMENT_STATUSES = ["pending", "succeeded", "failed", "refunded"] as const;
 
 /** Builds `col IN ('a', 'b')` for a check constraint. */
@@ -261,12 +263,23 @@ export const appointments = pgTable(
     cancelledBy: text("cancelled_by", { enum: ROLES }),
     cancelReason: text("cancel_reason"),
     declineNote: text("decline_note"),
+    /**
+     * Set when the patient moved an appointment (SCH-5 #23): the appointment this
+     * one replaces. In approval mode the old one stays live until this one is approved.
+     */
+    rescheduledFromId: uuid("rescheduled_from_id").references((): AnyPgColumn => appointments.id, {
+      onDelete: "set null",
+    }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
     index("appointments_practitioner_start_idx").on(t.practitionerId, t.startsAt),
     index("appointments_patient_start_idx").on(t.patientId, t.startsAt),
+    // One waiting move request per appointment. A check in code can't promise this:
+    // two requests at once can both see "none" and both insert. This index makes
+    // the second insert fail, and lib/booking.ts reports it as "reschedule_pending".
+    uniqueIndex("appointments_one_pending_move").on(t.rescheduledFromId).where(sql`status = 'pending'`),
     check("appointments_status_check", oneOf("status", APPOINTMENT_STATUSES)),
     check("appointments_booked_by_check", oneOf("booked_by", BOOKED_BY)),
     check("appointments_cancelled_by_check", sql`cancelled_by IS NULL OR ${oneOf("cancelled_by", ROLES)}`),
@@ -293,6 +306,12 @@ export const appointmentEvents = pgTable(
     actorRole: text("actor_role", { enum: ROLES }),
     note: text("note"),
     at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * Insertion order. now() is the same for every row in a transaction, so two
+     * events written together (instant mode's "booked" and "confirmed") tie on
+     * `at`. Sort by at, then seq.
+     */
+    seq: bigint("seq", { mode: "number" }).notNull().generatedAlwaysAsIdentity(),
   },
   (t) => [
     index("appointment_events_appointment_idx").on(t.appointmentId, t.at),

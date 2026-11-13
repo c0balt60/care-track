@@ -36,6 +36,20 @@
       "when": 1794340975932,
       "tag": "0004_audit_log",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794589036837,
+      "tag": "0005_appointment_reschedule",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794592252654,
+      "tag": "0006_event_order_and_one_pending_move",
+      "breakpoints": true
     }
   ]
 }

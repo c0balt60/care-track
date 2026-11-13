@@ -3,11 +3,12 @@ import { ArrowLeftIcon, CalendarIcon, ClockIcon, InfoIcon, MapPinIcon } from "@/
 import { EmptyState, PageHeader, param } from "@/components/ui";
 import { formatWhen } from "@/lib/dates";
 import { requireRole } from "@/lib/auth";
+import { loadAppointmentFor } from "@/lib/appointments";
 import { bookingErrors, loadBookableSlot, type BookingError } from "@/lib/booking";
 import { bookAppointment } from "./actions";
 
-// Patients book for themselves here. Not yet on real data: staff booking for a
-// patient (SCH-6 #24) and rescheduling (SCH-5 #23).
+// Patients book for themselves here, or move an appointment (?reschedule=<id>).
+// Not yet on real data: staff booking for a patient (SCH-6 #24).
 export default async function Book({ params, searchParams }: PageProps<"/book/[slotId]">) {
   const viewer = await requireRole("patient", "staff");
   const { slotId } = await params;
@@ -15,6 +16,11 @@ export default async function Book({ params, searchParams }: PageProps<"/book/[s
   const notice = param(sp.notice);
   const error = param(sp.error);
   const message = error && Object.hasOwn(bookingErrors, error) ? bookingErrors[error as BookingError] : null;
+
+  // The appointment being moved, if it's this patient's. The id is passed on to the
+  // action either way, and bookSlot() refuses it if it isn't theirs or can't move.
+  const rescheduleFromId = param(sp.reschedule) ?? null;
+  const moving = rescheduleFromId && viewer.role === "patient" ? await loadAppointmentFor(viewer, rescheduleFromId) : null;
 
   // ponytail: practitioner pages are still on mock data (SCH-3 #21), so "back" goes to search.
   const back = "/search";
@@ -63,7 +69,20 @@ export default async function Book({ params, searchParams }: PageProps<"/book/[s
   return (
     <div className="mx-auto max-w-xl">
       {backLink}
-      <PageHeader title={viewer.role === "staff" ? "Book for a patient" : "Confirm your appointment"} />
+      <PageHeader title={viewer.role === "staff" ? "Book for a patient" : moving ? "Confirm your new time" : "Confirm your appointment"} />
+
+      {moving && (
+        <p className="mb-4 flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-blue-900">
+          <InfoIcon className="mt-0.5 shrink-0" />
+          <span>
+            Moving your {formatWhen(moving.appointment.startsAt, moving.practitioner.timeZone)} appointment.{" "}
+            {approval
+              ? `You keep that time until ${p.name} accepts the new one.`
+              : "That time is cancelled when you confirm."}{" "}
+            <Link href={`/appointments/${moving.appointment.id}`} className="link">Keep my current time</Link>
+          </span>
+        </p>
+      )}
 
       <div className="card space-y-1 p-4 sm:p-5">
         <p className="flex items-center gap-2 text-lg font-semibold">
@@ -89,20 +108,25 @@ export default async function Book({ params, searchParams }: PageProps<"/book/[s
           {bookingErrors.staff}
         </p>
       ) : (
-        <form action={bookAppointment.bind(null, slotId)} className="mt-6 space-y-4">
+        <form action={bookAppointment.bind(null, slotId, rescheduleFromId)} className="mt-6 space-y-4">
           <p className="text-sm text-muted">
             Booking as {viewer.name}. Your date of birth and phone come from your{" "}
             <Link href="/settings" className="link">account</Link>.
           </p>
           <div>
             <label htmlFor="reason" className="label">Reason for visit</label>
-            <textarea id="reason" name="reason" rows={3} required maxLength={1000} className="input" aria-describedby="mode" />
+            <textarea
+              id="reason" name="reason" rows={3} required maxLength={1000} className="input" aria-describedby="mode"
+              defaultValue={moving?.appointment.reason}
+            />
           </div>
           <p id="mode" className="flex items-start gap-2 text-sm text-muted">
             <InfoIcon className="mt-px shrink-0 text-blue-700" width={18} height={18} />
             {approval ? `${p.name} reviews requests before confirming.` : "This time is confirmed right away."}
           </p>
-          <button className="btn btn-primary w-full">{approval ? "Request appointment" : "Book appointment"}</button>
+          <button className="btn btn-primary w-full">
+            {moving ? (approval ? "Request new time" : "Move appointment") : approval ? "Request appointment" : "Book appointment"}
+          </button>
         </form>
       )}
     </div>
