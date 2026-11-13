@@ -121,7 +121,7 @@ describe("loadAppointmentFor", () => {
 describe("approve", () => {
   it("confirms a pending request and records the event and audit row", async () => {
     const id = await makeAppointment("pending");
-    expect(await approve(practitioner, id, NOW)).toEqual({ ok: true });
+    expect(await approve(practitioner, id, NOW)).toMatchObject({ ok: true });
 
     expect((await statusOf(id)).status).toBe("confirmed");
     const events = await eventsOf(id);
@@ -133,7 +133,7 @@ describe("approve", () => {
 
   it("staff at the practitioner's clinic can approve", async () => {
     const id = await makeAppointment("pending");
-    expect(await approve(staff, id, NOW)).toEqual({ ok: true });
+    expect(await approve(staff, id, NOW)).toMatchObject({ ok: true });
   });
 
   it("the patient can't approve their own request", async () => {
@@ -157,7 +157,7 @@ describe("approve", () => {
 describe("decline", () => {
   it("saves the note, but the audit log only says a note was given", async () => {
     const id = await makeAppointment("pending");
-    expect(await decline(practitioner, id, "  Fully booked that week  ", NOW)).toEqual({ ok: true });
+    expect(await decline(practitioner, id, "  Fully booked that week  ", NOW)).toMatchObject({ ok: true });
 
     const a = await statusOf(id);
     expect(a.status).toBe("declined");
@@ -169,7 +169,7 @@ describe("decline", () => {
 
   it("the note is optional", async () => {
     const id = await makeAppointment("pending");
-    expect(await decline(staff, id, "", NOW)).toEqual({ ok: true });
+    expect(await decline(staff, id, "", NOW)).toMatchObject({ ok: true });
     expect((await statusOf(id)).declineNote).toBeNull();
   });
 
@@ -182,22 +182,32 @@ describe("decline", () => {
 describe("cancel", () => {
   it("the patient can withdraw a pending request without a reason", async () => {
     const id = await makeAppointment("pending");
-    expect(await cancel(patient, id, "", NOW)).toEqual({ ok: true });
+    expect(await cancel(patient, id, "", NOW)).toMatchObject({ ok: true });
     expect(await statusOf(id)).toMatchObject({ status: "cancelled", cancelledBy: "patient", cancelReason: null });
   });
 
   it("the practitioner must give a reason", async () => {
     const id = await makeAppointment("confirmed");
     expect(await cancel(practitioner, id, "   ", NOW)).toEqual({ ok: false, error: "reason" });
-    expect(await cancel(practitioner, id, "Out sick", NOW)).toEqual({ ok: true });
+    expect(await cancel(practitioner, id, "Out sick", NOW)).toMatchObject({ ok: true });
     expect(await statusOf(id)).toMatchObject({ status: "cancelled", cancelledBy: "practitioner", cancelReason: "Out sick" });
   });
 
   it("staff cancelling are recorded as staff", async () => {
     const id = await makeAppointment("confirmed");
-    expect(await cancel(staff, id, "Clinic closed for weather", NOW)).toEqual({ ok: true });
+    expect(await cancel(staff, id, "Clinic closed for weather", NOW)).toMatchObject({ ok: true });
     expect((await statusOf(id)).cancelledBy).toBe("staff");
     expect((await auditOf(id))[0].diff).toMatchObject({ status: { from: "confirmed", to: "cancelled" } });
+  });
+
+  it("reports what the appointment was before, so the page says withdrawn vs. cancelled correctly", async () => {
+    // The request is approved after the patient's page loaded but before they clicked.
+    const id = await makeAppointment("pending");
+    await approve(practitioner, id, NOW);
+    expect(await cancel(patient, id, "", NOW)).toEqual({ ok: true, from: "confirmed" });
+
+    const pendingId = await makeAppointment("pending", new Date(TOMORROW.getTime() + 3_600_000));
+    expect(await cancel(patient, pendingId, "", NOW)).toEqual({ ok: true, from: "pending" });
   });
 
   it("a cancelled appointment can't be cancelled again", async () => {

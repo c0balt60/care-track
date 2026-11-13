@@ -84,7 +84,8 @@ export const appointmentErrors = {
 };
 export type AppointmentError = keyof typeof appointmentErrors;
 
-type Result = { ok: true } | { ok: false; error: AppointmentError | "not_found" };
+/** On success, `from` is the status the appointment had just before the change. */
+type Result = { ok: true; from: (typeof appointments.$inferSelect)["status"] } | { ok: false; error: AppointmentError | "not_found" };
 
 /** Trims a free-text field. "" becomes null; too long is an error. */
 function cleanNote(input: unknown): { ok: true; value: string | null } | { ok: false } {
@@ -146,7 +147,7 @@ async function changeStatus(
     });
     await audit(viewer.userId, change.auditAction, "appointments", id, change.diff, tx);
     await change.after?.(tx);
-    return { ok: true } as const;
+    return { ok: true, from: row.appointment.status } as const;
   });
 }
 

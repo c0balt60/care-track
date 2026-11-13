@@ -201,7 +201,7 @@ describe("rescheduling", () => {
       if (!res.ok) return;
       expect((await get(oldId)).status).toBe("confirmed");
 
-      expect(await approve(reviewer, res.appointmentId, NOW)).toEqual({ ok: true });
+      expect(await approve(reviewer, res.appointmentId, NOW)).toMatchObject({ ok: true });
       expect((await get(res.appointmentId)).status).toBe("confirmed");
       expect(await get(oldId)).toMatchObject({ status: "cancelled", cancelReason: "Rescheduled" });
       expect(await eventTypes(oldId)).toContain("rescheduled");
@@ -211,7 +211,7 @@ describe("rescheduling", () => {
       const oldId = await confirmedAtTen(approval);
       const res = await move(alice, approval, ELEVEN, oldId);
       if (!res.ok) throw new Error("move failed");
-      expect(await decline(reviewer, res.appointmentId, "", NOW)).toEqual({ ok: true });
+      expect(await decline(reviewer, res.appointmentId, "", NOW)).toMatchObject({ ok: true });
       expect((await get(oldId)).status).toBe("confirmed");
     });
 
@@ -243,9 +243,9 @@ describe("rescheduling", () => {
       const oldId = await confirmedAtTen(approval);
       const res = await move(alice, approval, ELEVEN, oldId);
       if (!res.ok) throw new Error("move failed");
-      expect(await cancel(reviewer, oldId, "Running late today", NOW)).toEqual({ ok: true });
+      expect(await cancel(reviewer, oldId, "Running late today", NOW)).toMatchObject({ ok: true });
 
-      expect(await approve(reviewer, res.appointmentId, NOW)).toEqual({ ok: true });
+      expect(await approve(reviewer, res.appointmentId, NOW)).toMatchObject({ ok: true });
       // The old one keeps the clinic's cancellation; it isn't overwritten as "Rescheduled".
       expect(await get(oldId)).toMatchObject({ status: "cancelled", cancelledBy: "practitioner", cancelReason: "Running late today" });
     });

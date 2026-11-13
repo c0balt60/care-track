@@ -65,7 +65,6 @@ export function CancelButton({
       cancel={pending ? "Keep request" : "Keep appointment"}
       danger
       action={action}
-      hidden={pending ? { pending: "1" } : {}}
     >
       <div>
         <label htmlFor={`reason-${id}`} className="label">Reason{reasonRequired ? "" : " (optional)"}</label>

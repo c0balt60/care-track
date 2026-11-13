@@ -42,7 +42,9 @@ export async function declineAppointment(id: string, formData: FormData) {
 
 export async function cancelAppointment(id: string, formData: FormData) {
   const viewer = await viewerOrLogin(id);
-  // Withdrawing a pending request and cancelling a confirmed one read differently on the page.
-  const notice = formData.get("pending") === "1" ? "withdrawn" : "cancelled";
-  finish(id, await cancel(viewer, id, formData.get("note")), notice);
+  const result = await cancel(viewer, id, formData.get("note"));
+  // Withdrawing a pending request and cancelling a confirmed one read differently.
+  // Decided by what the appointment actually was when cancelled, not by the form:
+  // a request can be approved between the page loading and the click.
+  finish(id, result, result.ok && result.from === "pending" ? "withdrawn" : "cancelled");
 }

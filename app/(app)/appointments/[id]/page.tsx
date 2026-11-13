@@ -160,9 +160,15 @@ export default async function AppointmentDetail({ params, searchParams }: PagePr
   );
 }
 
-/** Who a role is, from this viewer's point of view: "you", or a name. */
-function who(role: Role, viewer: ReadyViewer, { practitioner: p, clinic, patient }: Loaded) {
-  if (role === viewer.role) return "you";
+/**
+ * Who acted, from this viewer's point of view: "you", or a name.
+ * "You" means the same person, not the same role: a clinic has several staff, so
+ * a colleague's cancellation must not read as yours. An appointment has only one
+ * patient and one practitioner, so for those roles the role is enough (and covers
+ * events with no recorded user, like seeded history).
+ */
+function who(role: Role, actorUserId: string | null, viewer: ReadyViewer, { practitioner: p, clinic, patient }: Loaded) {
+  if (actorUserId === viewer.userId || (role === viewer.role && role !== "staff")) return "you";
   switch (role) {
     case "patient": return patient.name;
     case "practitioner": return p.name;
@@ -191,7 +197,8 @@ function statusLine(found: Loaded, viewer: ReadyViewer) {
   // The "Moved to ..." line already explains a rescheduled cancellation.
   if (a.status === "cancelled" && found.movedTo) return undefined;
   if (a.status === "cancelled") {
-    const by = a.cancelledBy ? who(a.cancelledBy, viewer, found) : "the clinic";
+    const cancelEvent = found.events.findLast((e) => e.type === "cancelled");
+    const by = a.cancelledBy ? who(a.cancelledBy, cancelEvent?.actorUserId ?? null, viewer, found) : "the clinic";
     return `Cancelled by ${by}${a.cancelReason ? `: "${a.cancelReason}"` : ""}`;
   }
 }
