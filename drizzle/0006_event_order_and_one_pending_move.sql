@@ -1,0 +1,2 @@
+ALTER TABLE "appointment_events" ADD COLUMN "seq" bigint NOT NULL GENERATED ALWAYS AS IDENTITY (sequence name "appointment_events_seq_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1);--> statement-breakpoint
+CREATE UNIQUE INDEX "appointments_one_pending_move" ON "appointments" USING btree ("rescheduled_from_id") WHERE status = 'pending';

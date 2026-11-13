@@ -44,7 +44,12 @@ export async function loadAppointmentFor(viewer: ReadyViewer, id: string) {
 
   const link = { id: appointments.id, startsAt: appointments.startsAt, status: appointments.status };
   const [events, [movedFrom], [movedTo]] = await Promise.all([
-    db.select().from(appointmentEvents).where(eq(appointmentEvents.appointmentId, id)).orderBy(asc(appointmentEvents.at)),
+    // seq breaks ties: events written in one transaction share the same `at`.
+    db
+      .select()
+      .from(appointmentEvents)
+      .where(eq(appointmentEvents.appointmentId, id))
+      .orderBy(asc(appointmentEvents.at), asc(appointmentEvents.seq)),
     // The appointment this one replaced.
     row.appointment.rescheduledFromId
       ? db.select(link).from(appointments).where(eq(appointments.id, row.appointment.rescheduledFromId)).limit(1)

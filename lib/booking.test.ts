@@ -3,9 +3,9 @@
 import { eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { approve, cancel, decline } from "./appointments";
+import { approve, cancel, decline, loadAppointmentFor } from "./appointments";
 import type { ReadyViewer } from "./auth";
-import { bookSlot, loadBookableSlot, slotIdFor } from "./booking";
+import { bookSlot, isPendingMoveClash, loadBookableSlot, slotIdFor } from "./booking";
 import { db } from "./db";
 import * as schema from "./db/schema";
 
@@ -72,6 +72,17 @@ describe("bookSlot", () => {
 
     const events = await db.select().from(schema.appointmentEvents).where(eq(schema.appointmentEvents.appointmentId, appt.id));
     expect(events.map((e) => e.type).sort()).toEqual(["booked", "confirmed"]);
+  });
+
+  it("shows the history in the order it happened, though both events share a timestamp", async () => {
+    const res = await book(alice, instant, TEN);
+    if (!res.ok) throw new Error("booking failed");
+    const viewer: ReadyViewer = { userId: alice.userId, name: "alice", email: "alice@test", role: "patient", patientId: alice.patientId };
+
+    const found = await loadAppointmentFor(viewer, res.appointmentId);
+    const [booked, confirmed] = found!.events;
+    expect(booked.at).toEqual(confirmed.at); // same transaction, same now()
+    expect(found!.events.map((e) => e.type)).toEqual(["booked", "confirmed"]); // not sorted: real order
   });
 
   it("creates a pending request in approval mode", async () => {
@@ -208,6 +219,24 @@ describe("rescheduling", () => {
       const oldId = await confirmedAtTen(approval);
       expect(await move(alice, approval, ELEVEN, oldId)).toMatchObject({ ok: true });
       expect(await move(alice, approval, TEN_THIRTY, oldId)).toEqual({ ok: false, error: "reschedule_pending" });
+    });
+
+    it("the database itself refuses a second waiting move request", async () => {
+      // This is what saves us when two requests both pass checkReschedule at the
+      // same moment (PGlite runs transactions one at a time, so we insert directly).
+      const oldId = await confirmedAtTen(approval);
+      const res = await move(alice, approval, ELEVEN, oldId);
+      if (!res.ok) throw new Error("move failed");
+
+      const second = db.insert(schema.appointments).values({
+        practitionerId: approval, patientId: alice.patientId, startsAt: TEN_THIRTY,
+        endsAt: new Date(TEN_THIRTY.getTime() + 30 * 60_000), status: "pending", bookedBy: "patient",
+        rescheduledFromId: oldId,
+      });
+      const err = await second.then(() => null, (e: unknown) => e);
+      expect(err).not.toBeNull();
+      // ...and bookSlot() recognizes that error, so the patient sees the friendly message.
+      expect(isPendingMoveClash(err)).toBe(true);
     });
 
     it("approving still works if the clinic cancelled the old one meanwhile", async () => {

@@ -93,10 +93,22 @@ export const bookingErrors = {
 };
 export type BookingError = keyof typeof bookingErrors;
 
+type PgError = { code?: string; constraint?: string };
+/** The Postgres error, whether the driver throws it directly or wraps it in `cause`. */
+const pgError = (err: unknown): PgError => {
+  const e = err as PgError & { cause?: PgError };
+  return e?.code ? e : (e?.cause ?? {});
+};
+
 /** Postgres "exclusion_violation": the overlap constraint rejected the insert. */
 function isOverlap(err: unknown) {
-  const e = err as { code?: string; cause?: { code?: string } };
-  return e?.code === "23P01" || e?.cause?.code === "23P01";
+  return pgError(err).code === "23P01";
+}
+
+/** Postgres "unique_violation" on the one-pending-move-request index. Exported for tests. */
+export function isPendingMoveClash(err: unknown) {
+  const e = pgError(err);
+  return e.code === "23505" && e.constraint === "appointments_one_pending_move";
 }
 
 /** Thrown inside the transaction to roll it back and report a booking error. */
@@ -185,6 +197,8 @@ export async function bookSlot(
   } catch (err) {
     if (err instanceof BookingRefused) return { ok: false, error: err.error };
     if (isOverlap(err)) return { ok: false, error: "taken" };
+    // Lost a race with another move request for the same appointment.
+    if (isPendingMoveClash(err)) return { ok: false, error: "reschedule_pending" };
     throw err;
   }
 }
