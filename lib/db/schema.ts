@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+    type AnyPgColumn,
     boolean,
     check,
     date, 
@@ -30,7 +31,7 @@ export const USER_ROLES = [...ROLES, "admin"] as const;
 export const APPOINTMENT_STATUSES = ["pending", "confirmed", "declined", "cancelled", "completed"] as const;
 export const BOOKING_MODES = ["instant", "approval"] as const;
 export const BOOKED_BY = ["patient", "staff"] as const;
-export const APPOINTMENT_EVENT_TYPES = ["booked", "confirmed", "declined", "cancelled", "completed"] as const;
+export const APPOINTMENT_EVENT_TYPES = ["booked", "confirmed", "declined", "cancelled", "completed", "rescheduled"] as const;
 export const PAYMENT_STATUSES = ["pending", "succeeded", "failed", "refunded"] as const;
 
 /** Builds `col IN ('a', 'b')` for a check constraint. */
@@ -261,6 +262,13 @@ export const appointments = pgTable(
     cancelledBy: text("cancelled_by", { enum: ROLES }),
     cancelReason: text("cancel_reason"),
     declineNote: text("decline_note"),
+    /**
+     * Set when the patient moved an appointment (SCH-5 #23): the appointment this
+     * one replaces. In approval mode the old one stays live until this one is approved.
+     */
+    rescheduledFromId: uuid("rescheduled_from_id").references((): AnyPgColumn => appointments.id, {
+      onDelete: "set null",
+    }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

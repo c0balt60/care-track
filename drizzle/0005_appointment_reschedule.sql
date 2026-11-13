@@ -1,0 +1,4 @@
+ALTER TABLE "appointment_events" DROP CONSTRAINT "appointment_events_type_check";--> statement-breakpoint
+ALTER TABLE "appointments" ADD COLUMN "rescheduled_from_id" uuid;--> statement-breakpoint
+ALTER TABLE "appointments" ADD CONSTRAINT "appointments_rescheduled_from_id_appointments_id_fk" FOREIGN KEY ("rescheduled_from_id") REFERENCES "public"."appointments"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "appointment_events" ADD CONSTRAINT "appointment_events_type_check" CHECK (type IN ('booked', 'confirmed', 'declined', 'cancelled', 'completed', 'rescheduled'));
