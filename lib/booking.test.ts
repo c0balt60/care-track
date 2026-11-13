@@ -3,6 +3,8 @@
 import { eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { approve, cancel, decline } from "./appointments";
+import type { ReadyViewer } from "./auth";
 import { bookSlot, loadBookableSlot, slotIdFor } from "./booking";
 import { db } from "./db";
 import * as schema from "./db/schema";
@@ -125,6 +127,121 @@ describe("bookSlot", () => {
 
     it.each([["empty", "   "], ["too long", "x".repeat(1001)]])("a reason that's %s", async (_, reason) => {
       expect(await book(alice, instant, TEN, reason)).toEqual({ ok: false, error: "reason" });
+    });
+  });
+});
+
+describe("rescheduling", () => {
+  const ELEVEN = new Date("2030-01-07T16:00:00Z");
+  const move = (who: typeof alice, practitionerId: string, start: Date, fromId: string) =>
+    bookSlot(who, slotIdFor(practitionerId, start), "Check-up", NOW, { rescheduleFromId: fromId });
+  const get = async (id: string) => (await db.select().from(schema.appointments).where(eq(schema.appointments.id, id)))[0];
+  const eventTypes = async (id: string) =>
+    (await db.select().from(schema.appointmentEvents).where(eq(schema.appointmentEvents.appointmentId, id))).map((e) => e.type);
+
+  /** A confirmed appointment for alice at 10:00 with `practitionerId`. */
+  async function confirmedAtTen(practitionerId: string) {
+    const res = await book(alice, practitionerId, TEN);
+    if (!res.ok) throw new Error("booking failed");
+    await db.update(schema.appointments).set({ status: "confirmed" }).where(eq(schema.appointments.id, res.appointmentId));
+    return res.appointmentId;
+  }
+
+  let reviewer: ReadyViewer<"practitioner">;
+  beforeAll(async () => {
+    const [u] = await db.insert(schema.users).values({ email: "reviewer@test", name: "reviewer", role: "practitioner" }).returning();
+    reviewer = { userId: u.id, name: u.name, email: u.email, role: "practitioner", practitionerId: approval };
+  });
+
+  describe("instant mode", () => {
+    it("cancels the old appointment and confirms the new one together", async () => {
+      const oldId = await confirmedAtTen(instant);
+      const res = await move(alice, instant, ELEVEN, oldId);
+      expect(res).toMatchObject({ ok: true, status: "confirmed" });
+      if (!res.ok) return;
+
+      expect(await get(oldId)).toMatchObject({ status: "cancelled", cancelledBy: "patient", cancelReason: "Rescheduled" });
+      expect(await get(res.appointmentId)).toMatchObject({ status: "confirmed", rescheduledFromId: oldId });
+      expect(await eventTypes(oldId)).toContain("rescheduled");
+      const audits = await db.select().from(schema.auditLog).where(eq(schema.auditLog.entityId, oldId));
+      expect(audits.map((r) => r.action)).toContain("appointment.reschedule");
+    });
+
+    it("can move into the next slot, right after the old time", async () => {
+      const oldId = await confirmedAtTen(instant);
+      expect(await move(alice, instant, TEN_THIRTY, oldId)).toMatchObject({ ok: true });
+    });
+
+    it("keeps the old appointment if the new time is taken", async () => {
+      const oldId = await confirmedAtTen(instant);
+      await book(bob, instant, ELEVEN);
+      expect(await move(alice, instant, ELEVEN, oldId)).toEqual({ ok: false, error: "taken" });
+      // The whole transaction rolled back, including cancelling the old one.
+      expect((await get(oldId)).status).toBe("confirmed");
+      expect(await eventTypes(oldId)).not.toContain("rescheduled");
+    });
+  });
+
+  describe("approval mode", () => {
+    it("sends a request and keeps the old time until it's accepted", async () => {
+      const oldId = await confirmedAtTen(approval);
+      const res = await move(alice, approval, ELEVEN, oldId);
+      expect(res).toMatchObject({ ok: true, status: "pending" });
+      if (!res.ok) return;
+      expect((await get(oldId)).status).toBe("confirmed");
+
+      expect(await approve(reviewer, res.appointmentId, NOW)).toEqual({ ok: true });
+      expect((await get(res.appointmentId)).status).toBe("confirmed");
+      expect(await get(oldId)).toMatchObject({ status: "cancelled", cancelReason: "Rescheduled" });
+      expect(await eventTypes(oldId)).toContain("rescheduled");
+    });
+
+    it("a declined request leaves the old appointment booked", async () => {
+      const oldId = await confirmedAtTen(approval);
+      const res = await move(alice, approval, ELEVEN, oldId);
+      if (!res.ok) throw new Error("move failed");
+      expect(await decline(reviewer, res.appointmentId, "", NOW)).toEqual({ ok: true });
+      expect((await get(oldId)).status).toBe("confirmed");
+    });
+
+    it("allows only one waiting move request per appointment", async () => {
+      const oldId = await confirmedAtTen(approval);
+      expect(await move(alice, approval, ELEVEN, oldId)).toMatchObject({ ok: true });
+      expect(await move(alice, approval, TEN_THIRTY, oldId)).toEqual({ ok: false, error: "reschedule_pending" });
+    });
+
+    it("approving still works if the clinic cancelled the old one meanwhile", async () => {
+      const oldId = await confirmedAtTen(approval);
+      const res = await move(alice, approval, ELEVEN, oldId);
+      if (!res.ok) throw new Error("move failed");
+      expect(await cancel(reviewer, oldId, "Running late today", NOW)).toEqual({ ok: true });
+
+      expect(await approve(reviewer, res.appointmentId, NOW)).toEqual({ ok: true });
+      // The old one keeps the clinic's cancellation; it isn't overwritten as "Rescheduled".
+      expect(await get(oldId)).toMatchObject({ status: "cancelled", cancelledBy: "practitioner", cancelReason: "Running late today" });
+    });
+  });
+
+  describe("refuses", () => {
+    it("someone else's appointment", async () => {
+      const oldId = await confirmedAtTen(instant);
+      expect(await move(bob, instant, ELEVEN, oldId)).toEqual({ ok: false, error: "reschedule" });
+      expect((await get(oldId)).status).toBe("confirmed");
+    });
+
+    it("a pending appointment (withdraw it instead)", async () => {
+      const res = await book(alice, approval, TEN);
+      if (!res.ok) throw new Error("booking failed");
+      expect(await move(alice, approval, ELEVEN, res.appointmentId)).toEqual({ ok: false, error: "reschedule" });
+    });
+
+    it("moving to a different practitioner", async () => {
+      const oldId = await confirmedAtTen(instant);
+      expect(await move(alice, approval, ELEVEN, oldId)).toEqual({ ok: false, error: "reschedule" });
+    });
+
+    it("an id that isn't a uuid", async () => {
+      expect(await move(alice, instant, ELEVEN, "a1")).toEqual({ ok: false, error: "reschedule" });
     });
   });
 });

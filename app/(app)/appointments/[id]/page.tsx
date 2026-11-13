@@ -18,6 +18,8 @@ const notices: Record<string, string> = {
   declined: "Request declined.",
   cancelled: "Appointment cancelled.",
   withdrawn: "Request withdrawn.",
+  moved: "Your appointment has been moved.",
+  move_requested: "Request sent. You keep your current time until it's accepted.",
 };
 
 export default async function AppointmentDetail({ params, searchParams }: PageProps<"/appointments/[id]">) {
@@ -29,7 +31,7 @@ export default async function AppointmentDetail({ params, searchParams }: PagePr
   // which aren't uuids and 404 here until SCH-7 (#25) moves them to the DB.
   const found = await loadAppointmentFor(viewer, id);
   if (!found) notFound();
-  const { appointment: a, practitioner: p, clinic, patient, events } = found;
+  const { appointment: a, practitioner: p, clinic, patient, events, movedFrom, movedTo } = found;
 
   // The clinic side sees the patient's date of birth and phone below, so record who looked.
   if (viewer.role !== "patient") await audit(viewer.userId, "patient.view", "patients", patient.id);
@@ -71,6 +73,18 @@ export default async function AppointmentDetail({ params, searchParams }: PagePr
           <StatusBadge status={a.status} />
         </div>
         {extra && <p className="mt-3 text-muted">{extra}</p>}
+        {movedFrom && (
+          <p className="mt-3 text-muted">
+            {a.status === "pending" ? "Would replace " : "Moved from "}
+            <Link href={`/appointments/${movedFrom.id}`} className="link">{formatWhen(movedFrom.startsAt, tz)}</Link>
+          </p>
+        )}
+        {movedTo && (
+          <p className="mt-3 text-muted">
+            {movedTo.status === "pending" ? "Move requested to " : "Moved to "}
+            <Link href={`/appointments/${movedTo.id}`} className="link">{formatWhen(movedTo.startsAt, tz)}</Link>
+          </p>
+        )}
 
         <dl className="mt-6 grid gap-4 sm:grid-cols-2">
           <div className={row}>
@@ -117,7 +131,10 @@ export default async function AppointmentDetail({ params, searchParams }: PagePr
 
         {actions.length > 0 && (
           <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-line pt-4">
-            {/* Reschedule ("reschedule" in actions) comes in the next commit. */}
+            {/* Hidden while a move request is waiting: bookSlot() allows one at a time. */}
+            {actions.includes("reschedule") && !movedTo && (
+              <Link href={`/practitioners/${p.id}?reschedule=${a.id}`} className="btn btn-secondary">Reschedule</Link>
+            )}
             {actions.includes("approve") && (
               <RequestButtons
                 id={a.id}
@@ -162,7 +179,7 @@ function eventLabel(e: Loaded["events"][number]) {
     case "declined": return "Declined";
     case "cancelled": return e.actorRole === "patient" ? "Cancelled by the patient" : "Cancelled by the clinic";
     case "completed": return "Completed";
-    case "rescheduled": return "Rescheduled";
+    case "rescheduled": return "Moved to a new time";
   }
 }
 
@@ -171,6 +188,8 @@ function statusLine(found: Loaded, viewer: ReadyViewer) {
   const { appointment: a, practitioner: p } = found;
   if (a.status === "pending" && viewer.role === "patient") return `Waiting for ${p.name} to confirm`;
   if (a.status === "declined") return a.declineNote ?? undefined;
+  // The "Moved to ..." line already explains a rescheduled cancellation.
+  if (a.status === "cancelled" && found.movedTo) return undefined;
   if (a.status === "cancelled") {
     const by = a.cancelledBy ? who(a.cancelledBy, viewer, found) : "the clinic";
     return `Cancelled by ${by}${a.cancelReason ? `: "${a.cancelReason}"` : ""}`;

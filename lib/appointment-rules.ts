@@ -14,8 +14,17 @@
 // | reschedule | confirmed | the patient                                 |
 //
 // Nothing is allowed once the appointment has started.
-import type { ReadyViewer } from "./auth";
 import type { APPOINTMENT_STATUSES } from "./db/schema";
+
+/**
+ * The parts of a viewer the rules read. A ReadyViewer from lib/auth fits, and so
+ * does a bare `{ role: "patient", patientId }` when only the ids are at hand.
+ */
+export type RulesViewer =
+  | { role: "patient"; patientId: string }
+  | { role: "practitioner"; practitionerId: string }
+  | { role: "staff"; clinicId: string }
+  | { role: "admin" };
 
 /**
  * How close to the start a patient may still cancel or reschedule a confirmed
@@ -39,7 +48,7 @@ export type RulesAppointment = {
  * True when the viewer is a party to the appointment and may open it. Admins
  * aren't: managing other people's appointments is ADM-1 (#32).
  */
-export function involves(viewer: ReadyViewer, a: RulesAppointment): boolean {
+export function involves(viewer: RulesViewer, a: RulesAppointment): boolean {
   switch (viewer.role) {
     case "patient": return a.patientId === viewer.patientId;
     case "practitioner": return a.practitionerId === viewer.practitionerId;
@@ -49,7 +58,7 @@ export function involves(viewer: ReadyViewer, a: RulesAppointment): boolean {
 }
 
 /** What the viewer may do to the appointment right now. Empty when nothing. */
-export function allowedActions(viewer: ReadyViewer, a: RulesAppointment, now = new Date()): AppointmentAction[] {
+export function allowedActions(viewer: RulesViewer, a: RulesAppointment, now = new Date()): AppointmentAction[] {
   if (!involves(viewer, a) || a.startsAt.getTime() <= now.getTime()) return [];
 
   const clinicSide = viewer.role === "practitioner" || viewer.role === "staff";
@@ -70,11 +79,11 @@ export function allowedActions(viewer: ReadyViewer, a: RulesAppointment, now = n
   }
 }
 
-export const can = (viewer: ReadyViewer, a: RulesAppointment, action: AppointmentAction, now = new Date()) =>
+export const can = (viewer: RulesViewer, a: RulesAppointment, action: AppointmentAction, now = new Date()) =>
   allowedActions(viewer, a, now).includes(action);
 
 /**
  * The clinic side must say why it cancels: the patient is losing a time they
  * were counting on. Patients may leave it blank.
  */
-export const cancelReasonRequired = (viewer: ReadyViewer) => viewer.role !== "patient";
+export const cancelReasonRequired = (viewer: RulesViewer) => viewer.role !== "patient";

@@ -7,12 +7,28 @@ import { Avatar, param } from "@/components/ui";
 import { formatWhen } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { clinics, practitioners } from "@/lib/db/schema";
-import { getAppointment, getPractitioner } from "@/lib/mock-data";
+import { can } from "@/lib/appointment-rules";
+import { loadAppointmentFor } from "@/lib/appointments";
+import { getViewerAs } from "@/lib/auth";
+import { getPractitioner, practitioners as mockPractitioners } from "@/lib/mock-data";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Pages on real data (like /appointments/[id]) link here by DB uuid, but this page
+ * still renders mock practitioners. ponytail: TEMPORARY bridge, matched by name
+ * like the profile lookup below; SCH-3 (#21) should look up by id only.
+ */
+async function mockForDbId(id: string) {
+  if (!UUID.test(id)) return undefined;
+  const [row] = await db.select({ name: practitioners.name }).from(practitioners).where(eq(practitioners.id, id)).limit(1);
+  return row && mockPractitioners.find((m) => m.name === row.name);
+}
 
 export default async function PractitionerProfile({ params, searchParams }: PageProps<"/practitioners/[id]">) {
   const { id } = await params;
   const sp = await searchParams;
-  const mock = getPractitioner(id);
+  const mock = getPractitioner(id) ?? (await mockForDbId(id));
   if (!mock) notFound();
 
   // Profile text and clinic come from the DB; hours and slots are still mock data.
@@ -35,7 +51,18 @@ export default async function PractitionerProfile({ params, searchParams }: Page
     .limit(1);
   const { clinic, ...profile } = row ?? { clinic: null };
   const p = { ...mock, ...profile };
-  const old = getAppointment(param(sp.reschedule) ?? "");
+
+  // The appointment being moved, if the signed-in patient owns it and may move it.
+  const rescheduleId = param(sp.reschedule);
+  const patient = rescheduleId ? await getViewerAs("patient") : null;
+  const found = patient && rescheduleId ? await loadAppointmentFor(patient, rescheduleId) : null;
+  const old =
+    found && patient && can(patient, { ...found.appointment, clinicId: found.practitioner.clinicId }, "reschedule")
+      ? { id: found.appointment.id, start: found.appointment.startsAt }
+      : null;
+  // ponytail: the time buttons below still link mock slot ids ("rivera_…"), which
+  // bookSlot() rejects, so picking a time stops at "isn't available" until SCH-3
+  // (#21) moves this page's slots to the DB. Same limit as a normal booking.
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">

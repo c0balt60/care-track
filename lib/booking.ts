@@ -8,6 +8,7 @@
 // not by checking first: two people can pass any check at the same moment, but only
 // one insert can win. The loser gets error "taken", which the page shows kindly.
 import { and, eq, gt, lt, notInArray } from "drizzle-orm";
+import { can } from "./appointment-rules";
 import { audit } from "./audit";
 import { addDays, dayKey } from "./dates";
 import { db } from "./db";
@@ -87,6 +88,8 @@ export const bookingErrors = {
   taken: "Someone just booked this time. Pick another time.",
   reason: "Tell us the reason for your visit (up to 1,000 characters).",
   staff: "Booking for a patient from the front desk isn't ready yet.",
+  reschedule: "That appointment can't be moved anymore. Check your appointments for its latest status.",
+  reschedule_pending: "You already asked to move that appointment. Withdraw that request first to pick a different time.",
 };
 export type BookingError = keyof typeof bookingErrors;
 
@@ -96,18 +99,36 @@ function isOverlap(err: unknown) {
   return e?.code === "23P01" || e?.cause?.code === "23P01";
 }
 
+/** Thrown inside the transaction to roll it back and report a booking error. */
+class BookingRefused extends Error {
+  constructor(readonly error: BookingError) {
+    super(error);
+  }
+}
+
 /**
  * Books a slot for a signed-in patient. Instant-mode practitioners are confirmed
  * right away; approval-mode ones get a pending request.
+ *
+ * With `rescheduleFromId`, the new appointment replaces one of the patient's
+ * confirmed appointments with the same practitioner (SCH-5 #23):
+ * - instant mode: the old one is cancelled and the new one confirmed in the same
+ *   transaction. Cancelling first frees its time, so the overlap constraint
+ *   doesn't trip on the patient's own appointment.
+ * - approval mode: the new one is a pending request linked to the old one, which
+ *   stays booked. approve() in lib/appointments.ts cancels the old one when the
+ *   request is accepted; a decline or withdrawal leaves it alone.
  */
 export async function bookSlot(
   patient: { userId: string; patientId: string },
   slotId: string,
   reasonInput: unknown,
   now = new Date(),
+  { rescheduleFromId }: { rescheduleFromId?: string | null } = {},
 ): Promise<{ ok: true; appointmentId: string; status: "confirmed" | "pending" } | { ok: false; error: BookingError }> {
   const reason = String(reasonInput ?? "").trim();
   if (!reason || reason.length > 1000) return { ok: false, error: "reason" };
+  if (rescheduleFromId != null && !UUID.test(rescheduleFromId)) return { ok: false, error: "reschedule" };
 
   const found = await loadBookableSlot(slotId, now);
   if (!found) return { ok: false, error: "slot" };
@@ -116,6 +137,14 @@ export async function bookSlot(
 
   try {
     const id = await db.transaction(async (tx) => {
+      if (rescheduleFromId) {
+        await checkReschedule(tx, patient, rescheduleFromId, practitioner, now);
+        // Lost a race with the clinic cancelling it since checkReschedule read it.
+        if (status === "confirmed" && !(await replaceOld(tx, rescheduleFromId, patient.userId, "patient", now))) {
+          throw new BookingRefused("reschedule");
+        }
+      }
+
       const [appt] = await tx
         .insert(appointments)
         .values({
@@ -126,6 +155,7 @@ export async function bookSlot(
           status,
           reason,
           bookedBy: "patient",
+          rescheduledFromId: rescheduleFromId ?? null,
         })
         .returning({ id: appointments.id });
 
@@ -138,12 +168,86 @@ export async function bookSlot(
             : []),
         ],
       );
-      await audit(patient.userId, "appointment.book", "appointments", appt.id, { status: { from: null, to: status } }, tx);
+      await audit(
+        patient.userId,
+        "appointment.book",
+        "appointments",
+        appt.id,
+        {
+          status: { from: null, to: status },
+          ...(rescheduleFromId && { rescheduledFromId: { from: null, to: rescheduleFromId } }),
+        },
+        tx,
+      );
       return appt.id;
     });
     return { ok: true, appointmentId: id, status };
   } catch (err) {
+    if (err instanceof BookingRefused) return { ok: false, error: err.error };
     if (isOverlap(err)) return { ok: false, error: "taken" };
     throw err;
   }
+}
+
+/** A transaction handle from db.transaction(). */
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * The appointment being moved must be the patient's, with the same practitioner,
+ * and movable under the rules (confirmed, not started). Only one pending move
+ * request at a time, so approving one can't leave another pointing at a
+ * cancelled appointment.
+ */
+async function checkReschedule(
+  tx: Tx,
+  patient: { patientId: string },
+  oldId: string,
+  practitioner: { id: string; clinicId: string | null },
+  now: Date,
+) {
+  const [old] = await tx.select().from(appointments).where(eq(appointments.id, oldId)).limit(1);
+  const movable =
+    old &&
+    old.practitionerId === practitioner.id &&
+    can(
+      { role: "patient", patientId: patient.patientId },
+      { ...old, clinicId: practitioner.clinicId },
+      "reschedule",
+      now,
+    );
+  if (!movable) throw new BookingRefused("reschedule");
+
+  const [waiting] = await tx
+    .select({ id: appointments.id })
+    .from(appointments)
+    .where(and(eq(appointments.rescheduledFromId, oldId), eq(appointments.status, "pending")))
+    .limit(1);
+  if (waiting) throw new BookingRefused("reschedule_pending");
+}
+
+/**
+ * Cancels the appointment a reschedule replaces, with a "rescheduled" event and
+ * an audit row. It counts as cancelled by the patient, who asked for the move,
+ * even when a practitioner's approval is what triggers it.
+ *
+ * Returns false (and changes nothing) if the old appointment is no longer a
+ * confirmed, upcoming one, e.g. the clinic cancelled it while the request waited.
+ */
+export async function replaceOld(
+  tx: Tx,
+  oldId: string,
+  actorUserId: string,
+  actorRole: "patient" | "practitioner" | "staff",
+  now = new Date(),
+): Promise<boolean> {
+  const updated = await tx
+    .update(appointments)
+    .set({ status: "cancelled", cancelledBy: "patient", cancelReason: "Rescheduled" })
+    .where(and(eq(appointments.id, oldId), eq(appointments.status, "confirmed"), gt(appointments.startsAt, now)))
+    .returning({ id: appointments.id });
+  if (!updated.length) return false;
+
+  await tx.insert(appointmentEvents).values({ appointmentId: oldId, type: "rescheduled", actorUserId, actorRole });
+  await audit(actorUserId, "appointment.reschedule", "appointments", oldId, { status: { from: "confirmed", to: "cancelled" } }, tx);
+  return true;
 }

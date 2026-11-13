@@ -8,10 +8,11 @@
 // If the patient withdraws at the same moment the practitioner approves, only one
 // update finds a matching row. The other gets error "stale" and the page reloads
 // with the latest state. Same idea as booking: let the database pick the winner.
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { can, cancelReasonRequired, involves, type AppointmentAction } from "./appointment-rules";
 import { audit, type AuditDiff } from "./audit";
 import type { ReadyViewer } from "./auth";
+import { replaceOld, type Tx } from "./booking";
 import { db } from "./db";
 import { appointmentEvents, appointments, clinics, patients, practitioners } from "./db/schema";
 
@@ -41,13 +42,23 @@ export async function loadAppointmentFor(viewer: ReadyViewer, id: string) {
     .limit(1);
   if (!row || !involves(viewer, rulesView(row.appointment, row.practitioner.clinicId))) return null;
 
-  const events = await db
-    .select()
-    .from(appointmentEvents)
-    .where(eq(appointmentEvents.appointmentId, id))
-    .orderBy(asc(appointmentEvents.at));
+  const link = { id: appointments.id, startsAt: appointments.startsAt, status: appointments.status };
+  const [events, [movedFrom], [movedTo]] = await Promise.all([
+    db.select().from(appointmentEvents).where(eq(appointmentEvents.appointmentId, id)).orderBy(asc(appointmentEvents.at)),
+    // The appointment this one replaced.
+    row.appointment.rescheduledFromId
+      ? db.select(link).from(appointments).where(eq(appointments.id, row.appointment.rescheduledFromId)).limit(1)
+      : Promise.resolve([]),
+    // The live appointment replacing this one: a pending move request, or the confirmed new time.
+    db
+      .select(link)
+      .from(appointments)
+      .where(and(eq(appointments.rescheduledFromId, id), inArray(appointments.status, ["pending", "confirmed"])))
+      .orderBy(desc(appointments.createdAt))
+      .limit(1),
+  ]);
 
-  return { ...row, events };
+  return { ...row, events, movedFrom: movedFrom ?? null, movedTo: movedTo ?? null };
 }
 
 /** The appointment as the rules see it. */
@@ -93,6 +104,8 @@ async function changeStatus(
     note: string | null;
     auditAction: string;
     diff: AuditDiff;
+    /** Extra writes that must commit together with the change. */
+    after?: (tx: Tx) => Promise<unknown>;
   },
 ): Promise<Result> {
   if (!UUID.test(id)) return { ok: false, error: "not_found" };
@@ -127,6 +140,7 @@ async function changeStatus(
       note: change.note,
     });
     await audit(viewer.userId, change.auditAction, "appointments", id, change.diff, tx);
+    await change.after?.(tx);
     return { ok: true } as const;
   });
 }
@@ -135,14 +149,22 @@ async function changeStatus(
 const noteDiff = (field: string, note: string | null): AuditDiff =>
   note ? { [field]: { from: null, to: "[redacted]" } } : {};
 
-/** Practitioner or staff accepts a pending request. */
+/**
+ * Practitioner or staff accepts a pending request. If the request moves an
+ * existing appointment, the old one is cancelled in the same transaction, so the
+ * patient never holds both times or neither. If the old one is already gone
+ * (cancelled meanwhile, or its time has passed), the request just stands alone.
+ */
 export function approve(viewer: ActingViewer, id: string, now = new Date()) {
-  return changeStatus(viewer, id, "approve", now, () => ({
+  return changeStatus(viewer, id, "approve", now, (current) => ({
     set: { status: "confirmed" },
     event: "confirmed",
     note: null,
     auditAction: "appointment.confirm",
     diff: { status: { from: "pending", to: "confirmed" } },
+    after: current.rescheduledFromId
+      ? (tx) => replaceOld(tx, current.rescheduledFromId!, viewer.userId, viewer.role, now)
+      : undefined,
   }));
 }
 
