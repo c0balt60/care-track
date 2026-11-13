@@ -1,64 +1,50 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CancelDialog, RequestActions, statusNote } from "@/components/appointment-card";
+import { CancelButton, RequestButtons } from "@/components/appointment-actions";
 import { ArrowLeftIcon } from "@/components/icons";
 import { Notice, param, StatusBadge } from "@/components/ui";
+import { allowedActions, cancelReasonRequired } from "@/lib/appointment-rules";
+import { appointmentErrors, loadAppointmentFor, type AppointmentError } from "@/lib/appointments";
+import { audit } from "@/lib/audit";
+import { requireRole, type ReadyViewer } from "@/lib/auth";
 import { formatDay, formatWhen } from "@/lib/dates";
-import { requireRole } from "@/lib/auth";
-import {
-  type Appointment, demoViewer, getAppointment, getClinic, getPatient, getPractitioner, involves, isUpcoming, previewBooking,
-} from "@/lib/mock-data";
+import { approveAppointment, cancelAppointment, declineAppointment } from "./actions";
+
+type Loaded = NonNullable<Awaited<ReturnType<typeof loadAppointmentFor>>>;
+type Role = "patient" | "practitioner" | "staff";
+
+const notices: Record<string, string> = {
+  confirmed: "Request accepted. The patient will see it's confirmed.",
+  declined: "Request declined.",
+  cancelled: "Appointment cancelled.",
+  withdrawn: "Request withdrawn.",
+};
 
 export default async function AppointmentDetail({ params, searchParams }: PageProps<"/appointments/[id]">) {
-  // Staff can pass ?patient= below, so only staff linked to a clinic get this far.
-  const viewer = demoViewer(await requireRole("patient", "practitioner", "staff"));
+  const viewer = await requireRole("patient", "practitioner", "staff");
   const { id } = await params;
   const sp = await searchParams;
 
-  // Prototype: "new_<slotId>" is the appointment the book page just "created",
-  // rebuilt from the URL. ?from= is the appointment being rescheduled.
-  const from = getAppointment(param(sp.from) ?? "");
-  let a: Appointment | undefined = id.startsWith("new_")
-    ? previewBooking(id.slice(4), {
-        patientId: viewer.role === "patient" ? viewer.patientId : (param(sp.patient) ?? ""),
-        reason: param(sp.reason) ?? from?.reason ?? "",
-        bookedBy: viewer.role === "staff" ? "staff" : "patient",
-      })
-    : getAppointment(id);
-  if (!a || !involves(viewer, a)) notFound();
+  // ponytail: the dashboards and /appointments list still link mock ids ("a1"),
+  // which aren't uuids and 404 here until SCH-7 (#25) moves them to the DB.
+  const found = await loadAppointmentFor(viewer, id);
+  if (!found) notFound();
+  const { appointment: a, practitioner: p, clinic, patient, events } = found;
 
-  const p = getPractitioner(a.practitionerId)!;
+  // The clinic side sees the patient's date of birth and phone below, so record who looked.
+  if (viewer.role !== "patient") await audit(viewer.userId, "patient.view", "patients", patient.id);
+
   const tz = p.timeZone;
-  const clinic = getClinic(p.clinicId);
-  const patient = getPatient(a.patientId);
-  if (from) a.history.push({ label: `Moved from ${formatWhen(from.start, tz)}`, at: new Date() });
-
-  // Prototype: show the result of Cancel / Accept / Decline without saving it.
-  const notice = param(sp.notice);
-  const note = param(sp.note);
-  if (notice === "cancelled" || notice === "confirmed" || notice === "declined") {
-    a = {
-      ...a,
-      status: notice,
-      ...(notice === "cancelled" && { cancelledBy: viewer.role, cancelReason: note }),
-      ...(notice === "declined" && { declineNote: note }),
-      history: [...a.history, { label: notice[0].toUpperCase() + notice.slice(1), at: new Date() }],
-    };
-  }
-
+  const when = formatWhen(a.startsAt, tz);
+  const actions = allowedActions(viewer, { ...a, clinicId: p.clinicId });
   const pending = a.status === "pending";
-  const banner =
-    notice === "cancelled" ? (pending ? "Request withdrawn." : "Appointment cancelled.")
-    : notice === "confirmed" ? "Request accepted. The patient will see it's confirmed."
-    : notice === "declined" ? "Request declined."
-    : !id.startsWith("new_") ? undefined
-    : from ? (pending ? `Request sent. You keep your ${formatWhen(from.start, tz)} time until ${p.name} responds.` : "Your appointment has been moved.")
-    : viewer.role === "staff" ? `${pending ? "Request sent" : "Booked"} for ${patient.name}.`
-    : pending ? `Request sent. We'll update this page when ${p.name} responds.`
-    : "You're booked.";
 
-  const upcoming = isUpcoming(a);
-  const extra = statusNote(a, viewer);
+  const noticeKey = param(sp.notice);
+  const notice = noticeKey && Object.hasOwn(notices, noticeKey) ? notices[noticeKey] : null;
+  const errorKey = param(sp.error);
+  const error = errorKey && Object.hasOwn(appointmentErrors, errorKey) ? appointmentErrors[errorKey as AppointmentError] : null;
+
+  const extra = statusLine(found, viewer);
   const row = "border-t border-line pt-4 sm:border-0 sm:pt-0";
 
   return (
@@ -67,15 +53,20 @@ export default async function AppointmentDetail({ params, searchParams }: PagePr
         <ArrowLeftIcon width={16} height={16} /> Appointments
       </Link>
 
-      {banner && <Notice>{banner}</Notice>}
+      {notice && <Notice>{notice}</Notice>}
+      {error && (
+        <p role="alert" className="mb-6 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+          {error}
+        </p>
+      )}
 
       <article className="card p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
-              <time dateTime={a.start.toISOString()}>{formatWhen(a.start, tz)}</time>
+              <time dateTime={a.startsAt.toISOString()}>{when}</time>
             </h1>
-            <p className="text-muted">{p.slotMinutes} minutes</p>
+            <p className="text-muted">{Math.round((a.endsAt.getTime() - a.startsAt.getTime()) / 60_000)} minutes</p>
           </div>
           <StatusBadge status={a.status} />
         </div>
@@ -91,9 +82,13 @@ export default async function AppointmentDetail({ params, searchParams }: PagePr
               <dt className="text-sm text-muted">Patient</dt>
               <dd>
                 {patient.name}
-                {patient.dob && (
+                {(patient.dob || patient.phone) && (
                   <span className="block text-sm text-muted">
-                    Born {new Date(`${patient.dob}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", dateStyle: "medium" })} · {patient.phone}
+                    {[
+                      patient.dob &&
+                        `Born ${new Date(`${patient.dob}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", dateStyle: "medium" })}`,
+                      patient.phone,
+                    ].filter(Boolean).join(" · ")}
                   </span>
                 )}
               </dd>
@@ -115,24 +110,69 @@ export default async function AppointmentDetail({ params, searchParams }: PagePr
 
         <h2 className="mt-6 text-sm font-semibold">History</h2>
         <ol className="mt-1 flex flex-wrap gap-x-2 text-sm text-muted">
-          {a.history.map((h, i) => (
-            <li key={i}>{i > 0 && "· "}{h.label} {formatDay(h.at, tz)}</li>
+          {events.map((e, i) => (
+            <li key={e.id}>{i > 0 && "· "}{eventLabel(e)} {formatDay(e.at, tz)}</li>
           ))}
         </ol>
 
-        {upcoming && (a.status === "confirmed" || (pending && viewer.role !== "staff")) && (
+        {actions.length > 0 && (
           <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-line pt-4">
-            {viewer.role === "patient" && a.status === "confirmed" && (
-              <Link href={`/practitioners/${p.id}?reschedule=${a.id}`} className="btn btn-secondary">Reschedule</Link>
+            {/* Reschedule ("reschedule" in actions) comes in the next commit. */}
+            {actions.includes("approve") && (
+              <RequestButtons
+                id={a.id}
+                summary={`${patient.name} asked for ${when}.`}
+                approveAction={approveAppointment.bind(null, a.id)}
+                declineAction={declineAppointment.bind(null, a.id)}
+              />
             )}
-            {viewer.role === "practitioner" && pending ? (
-              <RequestActions a={a} action={`/appointments/${a.id}`} />
-            ) : (
-              <CancelDialog a={a} viewer={viewer} />
+            {actions.includes("cancel") && (
+              <CancelButton
+                id={a.id}
+                summary={`${when} with ${viewer.role === "patient" ? p.name : patient.name}.`}
+                pending={pending}
+                reasonRequired={cancelReasonRequired(viewer)}
+                otherParty={patient.name}
+                action={cancelAppointment.bind(null, a.id)}
+              />
             )}
           </div>
         )}
       </article>
     </>
   );
+}
+
+/** Who a role is, from this viewer's point of view: "you", or a name. */
+function who(role: Role, viewer: ReadyViewer, { practitioner: p, clinic, patient }: Loaded) {
+  if (role === viewer.role) return "you";
+  switch (role) {
+    case "patient": return patient.name;
+    case "practitioner": return p.name;
+    case "staff": return clinic?.name ?? "the front desk";
+  }
+}
+
+/** One entry of the History list. */
+function eventLabel(e: Loaded["events"][number]) {
+  switch (e.type) {
+    case "booked": return e.actorRole === "staff" ? "Booked by the front desk" : "Booked";
+    // A confirmation with no actor is instant mode confirming at booking time.
+    case "confirmed": return e.actorRole ? "Confirmed" : "Confirmed automatically";
+    case "declined": return "Declined";
+    case "cancelled": return e.actorRole === "patient" ? "Cancelled by the patient" : "Cancelled by the clinic";
+    case "completed": return "Completed";
+    case "rescheduled": return "Rescheduled";
+  }
+}
+
+/** The extra line under the badge: who we're waiting on, who cancelled, the decline note. */
+function statusLine(found: Loaded, viewer: ReadyViewer) {
+  const { appointment: a, practitioner: p } = found;
+  if (a.status === "pending" && viewer.role === "patient") return `Waiting for ${p.name} to confirm`;
+  if (a.status === "declined") return a.declineNote ?? undefined;
+  if (a.status === "cancelled") {
+    const by = a.cancelledBy ? who(a.cancelledBy, viewer, found) : "the clinic";
+    return `Cancelled by ${by}${a.cancelReason ? `: "${a.cancelReason}"` : ""}`;
+  }
 }
