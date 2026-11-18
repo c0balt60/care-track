@@ -28,8 +28,9 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
         );
     }
 
+    if (viewer.role === "patient") return <PatientHome viewer={viewer} />;
+    // ponytail: practitioner and staff dashboards move off mock data in the next SCH-7 (#25) commit.
     const demo = demoViewer(viewer);
-    if (demo.role === "patient") return <PatientHome viewer={demo} />;
     if (demo.role === "practitioner") return <PractitionerHome viewer={demo} done={param(sp.done)} notice={param(sp.notice)} />;
     return <StaffHome viewer={demo} />;
 }
