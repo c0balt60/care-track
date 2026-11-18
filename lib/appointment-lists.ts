@@ -88,6 +88,26 @@ export async function listAppointmentsFor(viewer: ReadyViewer, options: ListOpti
     .orderBy(asc(appointments.startsAt), asc(appointments.id));
 }
 
+/** What the practitioner dashboard needs about the practitioner: their zone and booking mode. */
+export async function practitionerById(id: string) {
+  const [row] = await db
+    .select({ id: practitioners.id, name: practitioners.name, bookingMode: practitioners.bookingMode, timeZone: practitioners.timeZone })
+    .from(practitioners)
+    .where(eq(practitioners.id, id))
+    .limit(1);
+  return row ?? null;
+}
+
+/** What the staff dashboard needs about the clinic: its name and zone. */
+export async function clinicById(id: string) {
+  const [row] = await db
+    .select({ id: clinics.id, name: clinics.name, timeZone: clinics.timeZone })
+    .from(clinics)
+    .where(eq(clinics.id, id))
+    .limit(1);
+  return row ?? null;
+}
+
 /** The practitioners at a clinic, by name: the staff filter and the staff dashboard's columns. */
 export function practitionersAt(clinicId: string) {
   return db

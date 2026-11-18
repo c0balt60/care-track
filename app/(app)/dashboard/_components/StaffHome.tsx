@@ -1,12 +1,27 @@
 import Link from "next/link";
-import { PageHeader } from "@/components/ui";
-import { formatDayKey, formatTime, weekday } from "@/lib/dates";
-import { agendaFor, type DemoViewer, getClinic, getPatient, practitioners, today } from "@/lib/mock-data";
+import { notFound } from "next/navigation";
+import { PageHeader, StatusBadge } from "@/components/ui";
+import { clinicById, listAppointmentsFor, practitionersAt, type ListedAppointment } from "@/lib/appointment-lists";
+import type { ReadyViewer } from "@/lib/auth";
+import { addDays, dayKey, formatDayKey, formatTime, zoned } from "@/lib/dates";
 
-export default function StaffHome({ viewer }: { viewer: Extract<DemoViewer, { role: "staff" }> }) {
-    const clinic = getClinic(viewer.clinicId)!;
-    const day = today(clinic.timeZone);
-    const team = practitioners.filter((p) => p.clinicId === clinic.id);
+export default async function StaffHome({ viewer }: { viewer: ReadyViewer<"staff"> }) {
+    const clinic = await clinicById(viewer.clinicId);
+    // The session found this clinic a moment ago; it can only vanish if deleted meanwhile.
+    if (!clinic) notFound();
+
+    const tz = clinic.timeZone;
+    const day = dayKey(new Date(), tz);
+    const [team, today] = await Promise.all([
+        practitionersAt(clinic.id),
+        // Today on the clinic's clock, for everyone at the clinic, in one query.
+        listAppointmentsFor(viewer, {
+            from: zoned(day, 0, tz),
+            to: zoned(addDays(day, 1), 0, tz),
+            statuses: ["pending", "confirmed", "completed"],
+        }),
+    ]);
+    const byPractitioner = Map.groupBy(today, (r: ListedAppointment) => r.practitioner.id);
 
     return (
         <>
@@ -16,10 +31,10 @@ export default function StaffHome({ viewer }: { viewer: Extract<DemoViewer, { ro
                 actions={<Link href="/clinic/book" className="btn btn-primary">Book for a patient</Link>}
             />
 
+            {/* ponytail: booked appointments only; open times and "Off today" return with SCH-3 (#21). */}
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {team.map((p) => {
-                    const rows = agendaFor(p, day);
-                    const worksToday = !!(p.exceptions.find((e) => e.day === 0)?.hours ?? p.hours[weekday(day)])?.length;
+                    const rows = byPractitioner.get(p.id) ?? [];
                     return (
                         <section key={p.id} aria-labelledby={`col-${p.id}`} className="card self-start">
                             <h2 id={`col-${p.id}`} className="border-b border-line px-4 py-3 font-semibold">
@@ -28,25 +43,20 @@ export default function StaffHome({ viewer }: { viewer: Extract<DemoViewer, { ro
                             </h2>
                             {rows.length ? (
                                 <ol className="divide-y divide-line">
-                                    {rows.map((row) => (
-                                        <li key={row.start.getTime()} className="flex min-h-11 items-center gap-3 px-4">
-                                            <time dateTime={row.start.toISOString()} className="w-18 shrink-0 text-sm font-medium tabular-nums">
-                                                {formatTime(row.start, p.timeZone)}
+                                    {rows.map(({ appointment: a, patient }) => (
+                                        <li key={a.id} className="flex min-h-11 items-center gap-3 px-4">
+                                            <time dateTime={a.startsAt.toISOString()} className="w-18 shrink-0 text-sm font-medium tabular-nums">
+                                                {formatTime(a.startsAt, p.timeZone)}
                                             </time>
-                                            {row.appointment ? (
-                                                <Link href={`/appointments/${row.appointment.id}`} className="truncate py-2 hover:underline">
-                                                    {getPatient(row.appointment.patientId).name}
-                                                </Link>
-                                            ) : (
-                                                <Link href={`/book/${row.slot!.id}`} className="flex flex-1 items-center justify-between self-stretch text-muted hover:text-accent">
-                                                    Open <span className="text-sm font-medium text-accent">Book</span>
-                                                </Link>
-                                            )}
+                                            <Link href={`/appointments/${a.id}`} className="min-w-0 flex-1 truncate py-2 hover:underline">
+                                                {patient.name}
+                                            </Link>
+                                            {a.status !== "confirmed" && <StatusBadge status={a.status} />}
                                         </li>
                                     ))}
                                 </ol>
                             ) : (
-                                <p className="px-4 py-6 text-muted">{worksToday ? "No more open times today." : "Off today"}</p>
+                                <p className="px-4 py-6 text-muted">Nothing booked today.</p>
                             )}
                         </section>
                     );

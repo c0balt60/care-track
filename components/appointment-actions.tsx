@@ -1,9 +1,7 @@
 // Accept / Decline / Cancel buttons wired to server actions (SCH-5 #23).
 //
-// These take plain values instead of a mock Appointment, so they work with
-// database rows. The older CancelDialog and RequestActions in appointment-card.tsx
-// still serve the dashboards, which stay on mock data until SCH-7 (#25); that
-// issue should switch them to these and delete the old ones.
+// They take plain values, so any page can use them: the detail page, the
+// /appointments list, and the dashboards (SCH-7 #25).
 import { ConfirmDialog } from "./confirm-dialog";
 
 type ServerAction = (formData: FormData) => Promise<void>;

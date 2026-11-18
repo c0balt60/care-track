@@ -3,7 +3,7 @@
 import { eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { listAppointmentsFor, practitionersAt } from "./appointment-lists";
+import { clinicById, listAppointmentsFor, practitionerById, practitionersAt } from "./appointment-lists";
 import { involves } from "./appointment-rules";
 import type { ReadyViewer } from "./auth";
 import { db } from "./db";
@@ -187,5 +187,14 @@ describe("practitionersAt", () => {
     const names = (rows: { name: string }[]) => rows.map((r) => r.name);
     expect(names(await practitionersAt(riversideStaff.clinicId))).toEqual(["Dr. Grey", "Dr. House"]);
     expect(names(await practitionersAt(hilltopStaff.clinicId))).toEqual(["Dr. Wilson"]);
+  });
+});
+
+describe("practitionerById and clinicById", () => {
+  it("return the basics the dashboards need, or null", async () => {
+    expect(await practitionerById(grey.practitionerId)).toMatchObject({ name: "Dr. Grey", bookingMode: "approval", timeZone: "America/New_York" });
+    expect(await clinicById(riversideStaff.clinicId)).toMatchObject({ name: "Riverside Clinic", timeZone: "America/New_York" });
+    expect(await practitionerById(admin.userId)).toBeNull();
+    expect(await clinicById(admin.userId)).toBeNull();
   });
 });
