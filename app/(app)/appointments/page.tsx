@@ -1,51 +1,55 @@
 import Link from "next/link";
-import { AppointmentCard, RequestActions } from "@/components/appointment-card";
+import { RequestButtons } from "@/components/appointment-actions";
+import { AppointmentCard } from "@/components/appointment-card";
 import { CalendarIcon } from "@/components/icons";
-import { EmptyState, Notice, PageHeader, param } from "@/components/ui";
-import { dayKey, formatDayKey } from "@/lib/dates";
+import { EmptyState, PageHeader, param } from "@/components/ui";
+import { listAppointmentsFor, practitionersAt, type ListedAppointment } from "@/lib/appointment-lists";
+import { allowedActions } from "@/lib/appointment-rules";
 import { requireRole } from "@/lib/auth";
-import { type Appointment, appointmentsFor, demoViewer, getPatient, getAppointment, isUpcoming, practitioners } from "@/lib/mock-data";
+import { dayKey, formatDayKey, formatWhen } from "@/lib/dates";
+import { approveAppointment, declineAppointment } from "./[id]/actions";
 
-const tabs = {
-  upcoming: { label: "Upcoming", empty: "No upcoming appointments", match: (a: Appointment) => a.status === "confirmed" && isUpcoming(a) },
-  pending: { label: "Pending", empty: "No pending requests", match: (a: Appointment) => a.status === "pending" },
-  past: { label: "Past", empty: "No past appointments", match: (a: Appointment) => a.status === "completed" || (a.status === "confirmed" && !isUpcoming(a)) },
-  cancelled: { label: "Cancelled", empty: "Nothing cancelled or declined", match: (a: Appointment) => a.status === "cancelled" || a.status === "declined" },
+type Match = (row: ListedAppointment, now: Date) => boolean;
+const ended = ({ appointment: a }: ListedAppointment, now: Date) => a.endsAt.getTime() <= now.getTime();
+
+const tabs: Record<string, { label: string; empty: string; match: Match }> = {
+  upcoming: { label: "Upcoming", empty: "No upcoming appointments", match: (r, now) => r.appointment.status === "confirmed" && !ended(r, now) },
+  pending: { label: "Pending", empty: "No pending requests", match: (r) => r.appointment.status === "pending" },
+  past: { label: "Past", empty: "No past appointments", match: (r, now) => r.appointment.status === "completed" || (r.appointment.status === "confirmed" && ended(r, now)) },
+  cancelled: { label: "Cancelled", empty: "Nothing cancelled or declined", match: (r) => r.appointment.status === "cancelled" || r.appointment.status === "declined" },
 };
-type Tab = keyof typeof tabs;
 
 export default async function Appointments({ searchParams }: PageProps<"/appointments">) {
-  const viewer = demoViewer(await requireRole("patient", "practitioner", "staff"));
+  const viewer = await requireRole("patient", "practitioner", "staff");
   const sp = await searchParams;
+  const now = new Date();
 
   const s = param(sp.status) ?? "";
-  const status: Tab = Object.hasOwn(tabs, s) ? (s as Tab) : "upcoming";
-  const who = viewer.role === "staff" ? param(sp.practitioner) : undefined;
-  const done = param(sp.done);
-  const answered = getAppointment(done ?? "");
-  const notice = param(sp.notice);
+  const status = Object.hasOwn(tabs, s) ? s : "upcoming";
 
-  // Prototype: the answered request is hidden via ?done= since nothing is saved.
-  const mine = appointmentsFor(viewer).filter((a) => a.id !== done && (!who || a.practitionerId === who));
+  // Staff can narrow to one practitioner. Only an id from their own clinic's list
+  // is used, so whatever is in the URL never reaches the query unchecked.
+  const team = viewer.role === "staff" ? await practitionersAt(viewer.clinicId) : [];
+  const who = team.find((p) => p.id === param(sp.practitioner))?.id;
+
+  // Every tab's count needs every row, so load them all once and split here.
+  // ponytail: no paging yet; the Past tab grows without limit over the years.
+  const mine = await listAppointmentsFor(viewer, { practitionerId: who });
   const newestFirst = status === "past" || status === "cancelled";
-  const list = mine
-    .filter(tabs[status].match)
-    .sort((a, b) => (newestFirst ? -1 : 1) * (a.start.getTime() - b.start.getTime()));
+  const list = mine.filter((r) => tabs[status].match(r, now));
+  if (newestFirst) list.reverse();
 
-  const byDay = new Map<string, Appointment[]>();
-  for (const a of list) {
-    const d = dayKey(a.start, "America/New_York");
-    byDay.set(d, [...(byDay.get(d) ?? []), a]);
+  // Grouped by day in the practitioner's zone, the same zone the card shows the time in.
+  const byDay = new Map<string, ListedAppointment[]>();
+  for (const r of list) {
+    const d = dayKey(r.appointment.startsAt, r.practitioner.timeZone);
+    byDay.set(d, [...(byDay.get(d) ?? []), r]);
   }
   const keep = who ? `&practitioner=${who}` : "";
 
   return (
     <>
       <PageHeader title="Appointments" />
-
-      {answered && (notice === "confirmed" || notice === "declined") && (
-        <Notice>{notice === "confirmed" ? "Accepted" : "Declined"} {getPatient(answered.patientId).name}’s request.</Notice>
-      )}
 
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <nav aria-label="Filter by status" className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
@@ -58,7 +62,7 @@ export default async function Appointments({ searchParams }: PageProps<"/appoint
                   className="-mb-px flex min-h-11 items-center gap-1.5 border-b-2 border-transparent px-3 text-sm font-medium whitespace-nowrap text-muted hover:text-ink aria-[current=page]:border-accent aria-[current=page]:text-ink"
                 >
                   {t.label}
-                  <span className="rounded-full bg-sand px-1.5 text-xs text-ink">{mine.filter(t.match).length}</span>
+                  <span className="rounded-full bg-sand px-1.5 text-xs text-ink">{mine.filter((r) => t.match(r, now)).length}</span>
                 </Link>
               </li>
             ))}
@@ -72,7 +76,7 @@ export default async function Appointments({ searchParams }: PageProps<"/appoint
               <label htmlFor="practitioner" className="label">Practitioner</label>
               <select id="practitioner" name="practitioner" defaultValue={who ?? ""} className="input">
                 <option value="">Everyone</option>
-                {practitioners.filter((p) => p.clinicId === viewer.clinicId).map((p) => (
+                {team.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
@@ -84,21 +88,31 @@ export default async function Appointments({ searchParams }: PageProps<"/appoint
 
       {list.length ? (
         <div className="space-y-8">
-          {[...byDay].map(([day, appts]) => (
+          {[...byDay].map(([day, rows]) => (
             <section key={day} aria-labelledby={`day-${day}`}>
               <h2 id={`day-${day}`} className="mb-3 text-sm font-semibold text-muted">
                 <time dateTime={day}>{formatDayKey(day)}</time>
               </h2>
               <ul className="space-y-3">
-                {appts.map((a) => (
-                  <li key={a.id}>
-                    <AppointmentCard a={a} viewer={viewer}>
-                      {viewer.role === "practitioner" && a.status === "pending" && (
-                        <RequestActions a={a} action="/appointments" hidden={{ status: "pending" }} />
-                      )}
-                    </AppointmentCard>
-                  </li>
-                ))}
+                {rows.map((r) => {
+                  const { appointment: a, practitioner: p } = r;
+                  // The same rules the detail page and the server actions use.
+                  const canAnswer = allowedActions(viewer, { ...a, clinicId: p.clinicId }, now).includes("approve");
+                  return (
+                    <li key={a.id}>
+                      <AppointmentCard row={r} viewer={viewer}>
+                        {canAnswer && (
+                          <RequestButtons
+                            id={a.id}
+                            summary={`${r.patient.name} asked for ${formatWhen(a.startsAt, p.timeZone)}.`}
+                            approveAction={approveAppointment.bind(null, a.id)}
+                            declineAction={declineAppointment.bind(null, a.id)}
+                          />
+                        )}
+                      </AppointmentCard>
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           ))}

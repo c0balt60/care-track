@@ -88,5 +88,14 @@ export async function listAppointmentsFor(viewer: ReadyViewer, options: ListOpti
     .orderBy(asc(appointments.startsAt), asc(appointments.id));
 }
 
+/** The practitioners at a clinic, by name: the staff filter and the staff dashboard's columns. */
+export function practitionersAt(clinicId: string) {
+  return db
+    .select({ id: practitioners.id, name: practitioners.name, specialty: practitioners.specialty, timeZone: practitioners.timeZone })
+    .from(practitioners)
+    .where(eq(practitioners.clinicId, clinicId))
+    .orderBy(asc(practitioners.name), asc(practitioners.id));
+}
+
 /** One row of listAppointmentsFor. The card and the list pages take this shape. */
 export type ListedAppointment = Awaited<ReturnType<typeof listAppointmentsFor>>[number];

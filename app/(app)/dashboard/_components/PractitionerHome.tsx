@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AppointmentCard, RequestActions } from "@/components/appointment-card";
+import { DemoAppointmentCard, RequestActions } from "@/components/appointment-card";
 import { Notice, PageHeader, StatusBadge } from "@/components/ui";
 import { formatDay, formatDayKey, formatTime, formatWhen } from "@/lib/dates";
 import { agendaFor, appointmentsFor, getAppointment, getPatient, getPractitioner, slotsFor, today, type DemoViewer } from "@/lib/mock-data";
@@ -52,9 +52,9 @@ export default function PractitionerHome({ viewer, done, notice }: {
                         <ul className="space-y-3">
                             {pending.map((a) => (
                                 <li key={a.id}>
-                                    <AppointmentCard a={a} viewer={viewer}>
+                                    <DemoAppointmentCard a={a} viewer={viewer}>
                                         <RequestActions a={a} action="/dashboard" />
-                                    </AppointmentCard>
+                                    </DemoAppointmentCard>
                                 </li>
                             ))}
                         </ul>

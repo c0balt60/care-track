@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AppointmentCard, CancelDialog } from "@/components/appointment-card";
+import { DemoAppointmentCard, CancelDialog } from "@/components/appointment-card";
 import { CalendarIcon, SearchIcon } from "@/components/icons";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { appointmentsFor, type DemoViewer, isUpcoming } from "@/lib/mock-data";
@@ -27,12 +27,12 @@ export default function PatientHome({ viewer }: { viewer: Extract<DemoViewer, { 
                     {next && (
                         <section aria-labelledby="next">
                             <h2 id="next" className="mb-3 text-lg font-semibold">Next appointment</h2>
-                            <AppointmentCard a={next} viewer={viewer}>
+                            <DemoAppointmentCard a={next} viewer={viewer}>
                                 <Link href={`/practitioners/${next.practitionerId}?reschedule=${next.id}`} className="btn btn-secondary">
                                     Reschedule
                                 </Link>
                                 <CancelDialog a={next} viewer={viewer} />
-                            </AppointmentCard>
+                            </DemoAppointmentCard>
                         </section>
                     )}
 
@@ -40,7 +40,7 @@ export default function PatientHome({ viewer }: { viewer: Extract<DemoViewer, { 
                         <section aria-labelledby="pending">
                             <h2 id="pending" className="mb-3 text-lg font-semibold">Waiting for confirmation ({pending.length})</h2>
                             <ul className="space-y-3">
-                                {pending.map((a) => <li key={a.id}><AppointmentCard a={a} viewer={viewer} /></li>)}
+                                {pending.map((a) => <li key={a.id}><DemoAppointmentCard a={a} viewer={viewer} /></li>)}
                             </ul>
                         </section>
                     )}
@@ -52,7 +52,7 @@ export default function PatientHome({ viewer }: { viewer: Extract<DemoViewer, { 
                                 <Link href="/appointments" className="link text-sm">View all →</Link>
                             </div>
                             <ul className="space-y-3">
-                                {later.map((a) => <li key={a.id}><AppointmentCard a={a} viewer={viewer} /></li>)}
+                                {later.map((a) => <li key={a.id}><DemoAppointmentCard a={a} viewer={viewer} /></li>)}
                             </ul>
                         </section>
                     )}

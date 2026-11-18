@@ -3,7 +3,7 @@
 import { eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { listAppointmentsFor } from "./appointment-lists";
+import { listAppointmentsFor, practitionersAt } from "./appointment-lists";
 import { involves } from "./appointment-rules";
 import type { ReadyViewer } from "./auth";
 import { db } from "./db";
@@ -179,5 +179,13 @@ describe("listAppointmentsFor: filters and shape", () => {
     expect(rows[0].practitioner.name).toBe("Dr. Grey");
     expect(rows[0].clinic?.name).toBe("Riverside Clinic");
     expect(rows[0].patient).toEqual({ id: alice.patientId, name: "alice" });
+  });
+});
+
+describe("practitionersAt", () => {
+  it("lists a clinic's practitioners by name, and no one else's", async () => {
+    const names = (rows: { name: string }[]) => rows.map((r) => r.name);
+    expect(names(await practitionersAt(riversideStaff.clinicId))).toEqual(["Dr. Grey", "Dr. House"]);
+    expect(names(await practitionersAt(hilltopStaff.clinicId))).toEqual(["Dr. Wilson"]);
   });
 });
