@@ -15,10 +15,11 @@ export default async function StaffHome({ viewer }: { viewer: ReadyViewer<"staff
     const [team, today] = await Promise.all([
         practitionersAt(clinic.id),
         // Today on the clinic's clock, for everyone at the clinic, in one query.
+        // Booked means accepted: pending requests are on /appointments?status=pending.
         listAppointmentsFor(viewer, {
             from: zoned(day, 0, tz),
             to: zoned(addDays(day, 1), 0, tz),
-            statuses: ["pending", "confirmed", "completed"],
+            statuses: ["confirmed", "completed"],
         }),
     ]);
     const byPractitioner = Map.groupBy(today, (r: ListedAppointment) => r.practitioner.id);

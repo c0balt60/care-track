@@ -20,11 +20,12 @@ export default async function PractitionerHome({ viewer }: { viewer: ReadyViewer
     const day = dayKey(now, tz);
 
     const [agenda, requests] = await Promise.all([
-        // Today, midnight to midnight on the practitioner's own clock.
+        // Today, midnight to midnight on the practitioner's own clock. Booked means
+        // accepted: requests wait in "Needs your response" until they're answered.
         listAppointmentsFor(viewer, {
             from: zoned(day, 0, tz),
             to: zoned(addDays(day, 1), 0, tz),
-            statuses: ["pending", "confirmed", "completed"],
+            statuses: ["confirmed", "completed"],
         }),
         // Requests that can still be answered: the rules refuse once the time has started.
         listAppointmentsFor(viewer, { from: now, statuses: ["pending"] }),
