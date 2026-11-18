@@ -1,18 +1,16 @@
 import { redirect } from "next/navigation";
 import { UserIcon } from "@/components/icons";
-import { EmptyState, param } from "@/components/ui";
+import { EmptyState } from "@/components/ui";
 import { getViewer, hasProfile } from "@/lib/auth";
-import { demoViewer } from "@/lib/mock-data";
 import AdminHome from "./_components/AdminHome";
 import PatientHome from "./_components/PatientHome";
 import PractitionerHome from "./_components/PractitionerHome";
 import StaffHome from "./_components/StaffHome";
 
-export default async function Dashboard({ searchParams }: PageProps<"/dashboard">) {
+export default async function Dashboard() {
     // getViewer, not requireRole: an account without its profile row should see
     // why it can't do anything yet, not a 404.
     const viewer = await getViewer();
-    const sp = await searchParams;
     if (!viewer) redirect("/login");
 
     if (viewer.role === "admin") return <AdminHome name={viewer.name} />;
@@ -28,8 +26,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
         );
     }
 
-    const demo = demoViewer(viewer);
-    if (demo.role === "patient") return <PatientHome viewer={demo} />;
-    if (demo.role === "practitioner") return <PractitionerHome viewer={demo} done={param(sp.done)} notice={param(sp.notice)} />;
-    return <StaffHome viewer={demo} />;
+    if (viewer.role === "patient") return <PatientHome viewer={viewer} />;
+    if (viewer.role === "practitioner") return <PractitionerHome viewer={viewer} />;
+    return <StaffHome viewer={viewer} />;
 }

@@ -27,8 +27,6 @@ export default async function AppointmentDetail({ params, searchParams }: PagePr
   const { id } = await params;
   const sp = await searchParams;
 
-  // ponytail: the dashboards and /appointments list still link mock ids ("a1"),
-  // which aren't uuids and 404 here until SCH-7 (#25) moves them to the DB.
   const found = await loadAppointmentFor(viewer, id);
   if (!found) notFound();
   const { appointment: a, practitioner: p, clinic, patient, events, movedFrom, movedTo } = found;

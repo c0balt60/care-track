@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { hasProfile, type Viewer } from "@/lib/auth";
-import { appointmentsFor, demoViewer } from "@/lib/mock-data";
+import { listAppointmentsFor } from "@/lib/appointment-lists";
 import { MenuIcon, XIcon } from "./icons";
 import { NavLink } from "./nav-link";
 import { PrototypeNotice } from "./prototype-notice";
@@ -10,12 +10,7 @@ import { Logo } from "./ui";
 const roleLabel = { patient: "Patient", practitioner: "Practitioner", staff: "Clinic staff", admin: "Admin" };
 
 // The links only decide what's shown; each page checks access itself with requireRole().
-function Nav({ viewer }: { viewer: Viewer }) {
-  // Prototype: the pending count comes from the demo practitioner's appointments.
-  const pending =
-    viewer.role === "practitioner" && hasProfile(viewer)
-      ? appointmentsFor(demoViewer(viewer)).filter((a) => a.status === "pending").length
-      : 0;
+function Nav({ viewer, pending }: { viewer: Viewer; pending: number }) {
   const items: [label: string, href: string][] =
     // Admins, and accounts without their profile row, only have the dashboard for now.
     viewer.role === "admin" || !hasProfile(viewer) ? [["Home", "/dashboard"]]
@@ -54,12 +49,19 @@ function Nav({ viewer }: { viewer: Viewer }) {
 }
 
 /** Sidebar at lg and up. Below that, a top bar whose menu is a native popover. */
-export function AppShell({ viewer, children }: { viewer: Viewer; children: ReactNode }) {
+export async function AppShell({ viewer, children }: { viewer: Viewer; children: ReactNode }) {
+  // The badge on Appointments: the same count as the Pending tab there, so the two agree.
+  // Counted once here, since Nav renders twice (sidebar and mobile menu).
+  const pending =
+    viewer.role === "practitioner" && hasProfile(viewer)
+      ? (await listAppointmentsFor(viewer, { statuses: ["pending"] })).length
+      : 0;
+
   return (
     <div className="flex-1 lg:flex">
       <aside className="panel-dark sticky top-0 hidden h-dvh w-64 shrink-0 flex-col gap-6 p-4 lg:flex">
         <Logo href="/dashboard" />
-        <Nav viewer={viewer} />
+        <Nav viewer={viewer} pending={pending} />
       </aside>
 
       <div className="min-w-0 flex-1">
@@ -80,7 +82,7 @@ export function AppShell({ viewer, children }: { viewer: Viewer; children: React
                 <XIcon />
               </button>
             </div>
-            <Nav viewer={viewer} />
+            <Nav viewer={viewer} pending={pending} />
           </div>
         </header>
 
