@@ -65,7 +65,10 @@ export default async function Home() {
             <div aria-hidden="true" className="absolute -inset-1.5 -z-10 -rotate-2 rounded-4xl bg-avocado-300/60 sm:-inset-4" />
             {hasOpening ? (
               <>
-                <p className="mb-3 text-sm font-medium text-avocado-900">Opening soon near Troy, NY</p>
+                {/* No location filter yet (MAP-2 #52), so name the city this card is actually in. */}
+                <p className="mb-3 text-sm font-medium text-avocado-900">
+                  Opening soon in {soonest.clinic?.city ?? soonest.practitioner.city}
+                </p>
                 <PractitionerCard result={soonest} />
               </>
             ) : (
