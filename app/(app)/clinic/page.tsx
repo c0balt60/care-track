@@ -7,7 +7,7 @@ import { requireRole } from "@/lib/auth";
 import { clinicProfileErrors } from "@/lib/clinic-profile";
 import { db } from "@/lib/db";
 import { practitioners } from "@/lib/db/schema";
-import { demoViewer, getPractitioner, invites, practitioners as mockPractitioners } from "@/lib/mock-data";
+import { demoViewer, invites } from "@/lib/mock-data";
 import { removePractitioner, updateClinicProfile } from "./actions";
 import { getCurrentClinic } from "./current-clinic";
 
@@ -28,11 +28,6 @@ export default async function ClinicSettings({ searchParams }: PageProps<"/clini
   // ponytail: TEMPORARY. Invites have no table yet (no email service), so they stay mock data.
   // Prototype: invites are still mock data, keyed by the demo clinic id.
   const invited = invites.filter((i) => i.clinicId === demoViewer(viewer).clinicId);
-  // ponytail: TEMPORARY. /practitioners/[id] still takes mock ids, so link by matching names.
-  const profileHref = (name: string) => {
-    const mock = mockPractitioners.find((m) => m.name === name);
-    return mock && getPractitioner(mock.id) ? `/practitioners/${mock.id}` : null;
-  };
   const error = noticeText(clinicProfileErrors, param(sp.error));
   const notice = noticeText(
     { saved: "Clinic profile saved.", invited: "Invite sent.", removed: "Practitioner removed." },
@@ -94,7 +89,7 @@ export default async function ClinicSettings({ searchParams }: PageProps<"/clini
           <tbody className="divide-y divide-line border-t border-line">
             {team.map((p) => (
               <tr key={p.id}>
-                <td className="py-3 pr-2">{profileHref(p.name) ? <Link href={profileHref(p.name)!} className="link">{p.name}</Link> : p.name}</td>
+                <td className="py-3 pr-2"><Link href={`/practitioners/${p.id}`} className="link">{p.name}</Link></td>
                 <td className="hidden py-3 pr-2 sm:table-cell">{p.specialty}</td>
                 <td className="py-3 pr-2"><span className={`${pill} bg-green-50 text-green-800`}>Active</span></td>
                 <td className="py-3 text-right">

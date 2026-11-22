@@ -40,7 +40,7 @@ export default async function PractitionerHome({ viewer }: { viewer: ReadyViewer
                 actions={<Link href="/availability" className="btn btn-secondary">Edit hours</Link>}
             />
 
-            {/* ponytail: "Next opening" needs real open slots and returns with SCH-3 (#21). */}
+            {/* ponytail: "Next opening" can come back using openSlotsFor() (lib/open-slots.ts); left out of SCH-3 (#21) on purpose. */}
             <div className="grid gap-4 sm:grid-cols-2">
                 <StatCard title="Booked today" value={String(agenda.length)} />
                 <StatCard
@@ -82,7 +82,7 @@ export default async function PractitionerHome({ viewer }: { viewer: ReadyViewer
 
             <section aria-labelledby="agenda" className="mt-8">
                 <h2 id="agenda" className="mb-3 text-lg font-semibold">Today’s agenda</h2>
-                {/* ponytail: booked appointments only; open times between them return with SCH-3 (#21). */}
+                {/* ponytail: booked appointments only; open times between them can come from openSlotsFor() (lib/open-slots.ts). */}
                 {agenda.length ? (
                     <ol className="card divide-y divide-line">
                         {agenda.map(({ appointment: a, patient }) => (

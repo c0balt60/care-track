@@ -2,8 +2,8 @@ import Link from "next/link";
 import { SearchIcon } from "@/components/icons";
 import { PractitionerCard } from "@/components/practitioner-card";
 import { EmptyState, param } from "@/components/ui";
-import { dayKey } from "@/lib/dates";
-import { practitioners, services, slotsFor, today } from "@/lib/mock-data";
+import { addDays, dayKey } from "@/lib/dates";
+import { listServices, searchPractitioners } from "@/lib/practitioner-search";
 
 export default async function Search({ searchParams }: PageProps<"/search">) {
   const sp = await searchParams;
@@ -11,15 +11,12 @@ export default async function Search({ searchParams }: PageProps<"/search">) {
   const near = param(sp.near)?.trim() ?? "";
   const from = param(sp.from) ?? "";
 
-  // Prototype: every mock practitioner counts as "near", so only service and date filter.
-  const q = service.toLowerCase();
-  const results = practitioners
-    .filter((p) => !q || [p.specialty, ...p.services].some((s) => s.toLowerCase().includes(q)))
-    .map((p) => ({
-      p,
-      next: slotsFor(p).find((s) => !from || dayKey(s.start, p.timeZone) >= from)?.start.getTime() ?? Infinity,
-    }))
-    .sort((a, b) => a.next - b.next);
+  // "near" is shown in the heading but doesn't filter yet: location search is MAP-2 (#52) / MAP-3 (#53).
+  const [results, services] = await Promise.all([searchPractitioners({ service, from }), listServices()]);
+  // Earliest day the date picker allows. Patients are in many zones, and in the Americas
+  // "today" can already be tomorrow in UTC, so allow from yesterday (UTC). Picking a day
+  // that's over is harmless: searchPractitioners never shows past slots.
+  const earliest = addDays(dayKey(new Date(), "UTC"), -1);
 
   return (
     <div className="mx-auto grid max-w-6xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[18rem_1fr] lg:items-start">
@@ -38,7 +35,7 @@ export default async function Search({ searchParams }: PageProps<"/search">) {
         </div>
         <div>
           <label htmlFor="from" className="label">From</label>
-          <input id="from" name="from" type="date" min={today()} defaultValue={from} className="input" />
+          <input id="from" name="from" type="date" min={earliest} defaultValue={from} className="input" />
         </div>
         <button className="btn btn-primary sm:col-span-3 lg:col-span-1">
           <SearchIcon /> Find openings
@@ -58,9 +55,9 @@ export default async function Search({ searchParams }: PageProps<"/search">) {
 
         {results.length ? (
           <ul className="grid gap-4">
-            {results.map(({ p }) => (
-              <li key={p.id}>
-                <PractitionerCard p={p} from={from} />
+            {results.map((r) => (
+              <li key={r.practitioner.id}>
+                <PractitionerCard result={r} />
               </li>
             ))}
           </ul>
