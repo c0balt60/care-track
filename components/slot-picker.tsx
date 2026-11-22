@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { BOOKING_WINDOW_DAYS } from "@/lib/booking";
-import { addDays, dayKey, formatDayKey, formatTime, formatWhen, formatZone } from "@/lib/dates";
+import { addDays, dayKey, daysBetween, formatDayKey, formatTime, formatWhen, formatZone } from "@/lib/dates";
 import type { OpenSlot } from "@/lib/open-slots";
 import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
 
@@ -29,9 +29,15 @@ export function SlotPicker({
   query?: Record<string, string>;
 }) {
   const lastWeek = Math.ceil(BOOKING_WINDOW_DAYS / 7) - 1;
-  const w = Math.min(Math.max(week, 0), lastWeek);
   // Weeks start on "today" in the practitioner's zone, the same day openSlotsFor() starts from.
-  const days = Array.from({ length: 7 }, (_, i) => addDays(dayKey(new Date(), tz), w * 7 + i));
+  const today = dayKey(new Date(), tz);
+  // A ?day= inside the window picks its own week, worked out from today as of this render.
+  // Links that carry only a day (like the card's "More times") then stay right after
+  // midnight or days later, when the week they were made for has shifted.
+  const offset = day ? daysBetween(today, day) : -1;
+  const requested = offset >= 0 && offset < BOOKING_WINDOW_DAYS ? Math.floor(offset / 7) : week;
+  const w = Math.min(Math.max(requested, 0), lastWeek);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(today, w * 7 + i));
 
   const byDay = new Map<string, OpenSlot[]>();
   for (const s of slots) {

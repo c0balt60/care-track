@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { dayKey, daysBetween, formatDay, formatTime, formatWhen } from "@/lib/dates";
+import { dayKey, formatDay, formatTime, formatWhen } from "@/lib/dates";
 import type { SearchResult } from "@/lib/practitioner-search";
 import { MapPinIcon } from "./icons";
 import { Avatar } from "./ui";
@@ -15,14 +15,11 @@ export function PractitionerCard({ result }: { result: SearchResult }) {
   const first = slots[0];
   const firstDay = first ? dayKey(first.start, tz) : null;
   const chips = first ? slots.filter((s) => dayKey(s.start, tz) === firstDay).slice(0, 3) : [];
-  // "More times" opens the picker on the day this card shows, not this week, so a
-  // search with ?from= doesn't jump back to earlier times. SlotPicker weeks count
-  // from today in the practitioner's zone.
+  // "More times" opens the picker on the day this card shows, so a search with ?from=
+  // doesn't jump back to earlier times. Only the day goes in the link: SlotPicker works
+  // out its week when the profile renders, so the link can't go stale after midnight.
   const moreTimes = firstDay
-    ? `/practitioners/${p.id}?${new URLSearchParams({
-        week: String(Math.floor(daysBetween(dayKey(new Date(), tz), firstDay) / 7)),
-        day: firstDay,
-      })}`
+    ? `/practitioners/${p.id}?${new URLSearchParams({ day: firstDay })}`
     : `/practitioners/${p.id}`;
 
   return (
