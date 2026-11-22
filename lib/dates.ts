@@ -57,6 +57,11 @@ export function addDays(day: DayKey, n: number): DayKey {
   return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
 }
 
+/** Whole days from `from` to `to` (negative if `to` is earlier). Calendar days, so DST doesn't matter. */
+export function daysBetween(from: DayKey, to: DayKey): number {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+}
+
 /** 0 = Sunday */
 export function weekday(day: DayKey): number {
   return new Date(`${day}T12:00:00Z`).getUTCDay();

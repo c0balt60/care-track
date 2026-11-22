@@ -1,5 +1,12 @@
 import { expect, test } from "vitest";
-import { addDays, dayKey, minuteOfDay, toMinutes, weekday, zoned } from "@/lib/dates";
+import { addDays, dayKey, daysBetween, minuteOfDay, toMinutes, weekday, zoned } from "@/lib/dates";
+
+test("daysBetween counts calendar days, across months and DST changes", () => {
+  expect(daysBetween("2026-11-22", "2026-11-22")).toBe(0);
+  expect(daysBetween("2026-11-22", "2026-12-06")).toBe(14);
+  expect(daysBetween("2026-12-06", "2026-11-22")).toBe(-14);
+  expect(daysBetween("2026-03-07", "2026-03-09")).toBe(2); // US clocks change on Mar 8
+});
 
 const NY = "America/New_York";
 

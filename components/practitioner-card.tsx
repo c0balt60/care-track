@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { dayKey, formatDay, formatTime, formatWhen } from "@/lib/dates";
+import { dayKey, daysBetween, formatDay, formatTime, formatWhen } from "@/lib/dates";
 import type { SearchResult } from "@/lib/practitioner-search";
 import { MapPinIcon } from "./icons";
 import { Avatar } from "./ui";
@@ -13,7 +13,17 @@ export function PractitionerCard({ result }: { result: SearchResult }) {
   const { practitioner: p, clinic, slots } = result;
   const tz = p.timeZone;
   const first = slots[0];
-  const chips = first ? slots.filter((s) => dayKey(s.start, tz) === dayKey(first.start, tz)).slice(0, 3) : [];
+  const firstDay = first ? dayKey(first.start, tz) : null;
+  const chips = first ? slots.filter((s) => dayKey(s.start, tz) === firstDay).slice(0, 3) : [];
+  // "More times" opens the picker on the day this card shows, not this week, so a
+  // search with ?from= doesn't jump back to earlier times. SlotPicker weeks count
+  // from today in the practitioner's zone.
+  const moreTimes = firstDay
+    ? `/practitioners/${p.id}?${new URLSearchParams({
+        week: String(Math.floor(daysBetween(dayKey(new Date(), tz), firstDay) / 7)),
+        day: firstDay,
+      })}`
+    : `/practitioners/${p.id}`;
 
   return (
     <article className="card p-4 sm:p-5">
@@ -48,7 +58,7 @@ export function PractitionerCard({ result }: { result: SearchResult }) {
                 </li>
               ))}
               <li>
-                <Link href={`/practitioners/${p.id}`} className="link inline-flex min-h-11 items-center px-2 text-sm">
+                <Link href={moreTimes} className="link inline-flex min-h-11 items-center px-2 text-sm">
                   More times →
                 </Link>
               </li>
