@@ -1,16 +1,19 @@
 import Link from "next/link";
 import { dayKey, formatDay, formatTime, formatWhen } from "@/lib/dates";
-import { getClinic, type Practitioner, slotsFor } from "@/lib/mock-data";
+import type { SearchResult } from "@/lib/practitioner-search";
 import { MapPinIcon } from "./icons";
 import { Avatar } from "./ui";
 
-/** Up to 3 time chips for the next open day. `from` is a "YYYY-MM-DD" to start looking. */
-export function PractitionerCard({ p, from }: { p: Practitioner; from?: string }) {
+/**
+ * Up to 3 time chips for the next open day. Takes one row from
+ * searchPractitioners(), which already worked out the open slots (and applied
+ * any ?from= day filter), so this component does no data loading of its own.
+ */
+export function PractitionerCard({ result }: { result: SearchResult }) {
+  const { practitioner: p, clinic, slots } = result;
   const tz = p.timeZone;
-  const slots = slotsFor(p).filter((s) => !from || dayKey(s.start, tz) >= from);
   const first = slots[0];
   const chips = first ? slots.filter((s) => dayKey(s.start, tz) === dayKey(first.start, tz)).slice(0, 3) : [];
-  const clinic = getClinic(p.clinicId);
 
   return (
     <article className="card p-4 sm:p-5">

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { CalendarCheckIcon, CheckIcon, ClockIcon, SearchIcon } from "@/components/icons";
 import { PractitionerCard } from "@/components/practitioner-card";
-import { practitioners, services, slotsFor } from "@/lib/mock-data";
+import { listServices, searchPractitioners } from "@/lib/practitioner-search";
 
 const steps = [
   { icon: <SearchIcon />, tone: "bg-accent-soft text-teal-800", title: "Search", text: "Tell us what you need and where. We list who has the soonest opening." },
@@ -11,10 +11,11 @@ const steps = [
 
 const popular = ["Family medicine", "Dermatology", "Physical therapy", "Pediatrics"];
 
-export default function Home() {
-  const soonest = practitioners
-    .map((p) => ({ p, next: slotsFor(p)[0]?.start.getTime() ?? Infinity }))
-    .sort((a, b) => a.next - b.next)[0].p;
+export default async function Home() {
+  // The card only shows the first open day, so a week is plenty and keeps this page cheap:
+  // it works out slots for every practitioner. Results come back soonest first.
+  const [[soonest], services] = await Promise.all([searchPractitioners({ days: 7 }), listServices()]);
+  const hasOpening = Boolean(soonest?.slots.length);
 
   return (
     <>
@@ -62,8 +63,17 @@ export default function Home() {
             {/* Decorative avocado shapes behind the card. */}
             <div aria-hidden="true" className="absolute -inset-3 -z-10 -rotate-2 rounded-[2.5rem] bg-avocado-300/30 sm:-inset-8" />
             <div aria-hidden="true" className="absolute -inset-1.5 -z-10 -rotate-2 rounded-4xl bg-avocado-300/60 sm:-inset-4" />
-            <p className="mb-3 text-sm font-medium text-avocado-900">Opening soon near Troy, NY</p>
-            <PractitionerCard p={soonest} />
+            {hasOpening ? (
+              <>
+                <p className="mb-3 text-sm font-medium text-avocado-900">Opening soon near Troy, NY</p>
+                <PractitionerCard result={soonest} />
+              </>
+            ) : (
+              <div className="card p-5">
+                <p className="font-medium">No openings in the next week.</p>
+                <Link href="/search" className="link mt-1 inline-block">Search all open times →</Link>
+              </div>
+            )}
           </div>
         </div>
       </section>
