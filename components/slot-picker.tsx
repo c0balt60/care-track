@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { BOOKING_WINDOW_DAYS } from "@/lib/booking";
 import { addDays, dayKey, formatDayKey, formatTime, formatWhen, formatZone } from "@/lib/dates";
-import { BOOKING_WINDOW_DAYS, type Practitioner, slotsFor, today } from "@/lib/mock-data";
+import type { OpenSlot } from "@/lib/open-slots";
 import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
 
 const utc = (d: string, o: Intl.DateTimeFormatOptions) =>
@@ -9,16 +10,31 @@ const utc = (d: string, o: Intl.DateTimeFormatOptions) =>
 /**
  * Week strip plus time chips for the selected day. The week and day live in the
  * URL (?week=&day=), so this needs no client state and the back button works.
- * `query` is carried along on every link, e.g. { reschedule: "a1" }.
+ * `slots` come from openSlotsFor(), so every chip links a slot /book accepts.
+ * `query` is carried along on every link, e.g. { reschedule: "<appointment id>" }.
  */
-export function SlotPicker({ p, week, day, query = {} }: { p: Practitioner; week: number; day?: string; query?: Record<string, string> }) {
-  const tz = p.timeZone;
+export function SlotPicker({
+  practitionerId,
+  timeZone: tz,
+  slots,
+  week,
+  day,
+  query = {},
+}: {
+  practitionerId: string;
+  timeZone: string;
+  slots: OpenSlot[];
+  week: number;
+  day?: string;
+  query?: Record<string, string>;
+}) {
   const lastWeek = Math.ceil(BOOKING_WINDOW_DAYS / 7) - 1;
   const w = Math.min(Math.max(week, 0), lastWeek);
-  const days = Array.from({ length: 7 }, (_, i) => addDays(today(tz), w * 7 + i));
+  // Weeks start on "today" in the practitioner's zone, the same day openSlotsFor() starts from.
+  const days = Array.from({ length: 7 }, (_, i) => addDays(dayKey(new Date(), tz), w * 7 + i));
 
-  const byDay = new Map<string, ReturnType<typeof slotsFor>>();
-  for (const s of slotsFor(p)) {
+  const byDay = new Map<string, OpenSlot[]>();
+  for (const s of slots) {
     const d = dayKey(s.start, tz);
     byDay.set(d, [...(byDay.get(d) ?? []), s]);
   }
@@ -26,7 +42,7 @@ export function SlotPicker({ p, week, day, query = {} }: { p: Practitioner; week
   const times = byDay.get(selected) ?? [];
 
   const href = (w: number, d?: string) =>
-    `/practitioners/${p.id}?${new URLSearchParams({ ...query, week: String(w), ...(d && { day: d }) })}`;
+    `/practitioners/${practitionerId}?${new URLSearchParams({ ...query, week: String(w), ...(d && { day: d }) })}`;
   const carry = Object.keys(query).length ? `?${new URLSearchParams(query)}` : "";
   const arrow = "btn btn-secondary px-3";
 

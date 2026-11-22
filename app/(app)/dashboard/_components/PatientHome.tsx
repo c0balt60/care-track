@@ -33,7 +33,6 @@ export default async function PatientHome({ viewer }: { viewer: ReadyViewer<"pat
         const moveWaiting = pending.some((r) => r.appointment.rescheduledFromId === a.id);
         nextActions = (
             <>
-                {/* ponytail: the practitioner page still uses mock slots, so this stops at "isn't available" until SCH-3 (#21). */}
                 {actions.includes("reschedule") && !moveWaiting && (
                     <Link href={`/practitioners/${p.id}?reschedule=${a.id}`} className="btn btn-secondary">
                         Reschedule

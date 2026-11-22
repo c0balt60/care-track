@@ -32,7 +32,7 @@ export default async function StaffHome({ viewer }: { viewer: ReadyViewer<"staff
                 actions={<Link href="/clinic/book" className="btn btn-primary">Book for a patient</Link>}
             />
 
-            {/* ponytail: booked appointments only; open times and "Off today" return with SCH-3 (#21). */}
+            {/* ponytail: booked appointments only; open times and "Off today" can come from openSlotsFor() (lib/open-slots.ts). Staff can't book them until SCH-6 (#24). */}
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {team.map((p) => {
                     const rows = byPractitioner.get(p.id) ?? [];

@@ -22,14 +22,6 @@ export default async function Book({ params, searchParams }: PageProps<"/book/[s
   const rescheduleFromId = param(sp.reschedule) ?? null;
   const moving = rescheduleFromId && viewer.role === "patient" ? await loadAppointmentFor(viewer, rescheduleFromId) : null;
 
-  // ponytail: practitioner pages are still on mock data (SCH-3 #21), so "back" goes to search.
-  const back = "/search";
-  const backLink = (
-    <Link href={back} className="link mb-4 inline-flex min-h-11 items-center gap-1 text-sm">
-      <ArrowLeftIcon width={16} height={16} /> Back to search
-    </Link>
-  );
-
   if (notice === "booked" || notice === "requested") {
     return (
       <div className="mx-auto max-w-xl">
@@ -48,6 +40,17 @@ export default async function Book({ params, searchParams }: PageProps<"/book/[s
   }
 
   const found = await loadBookableSlot(slotId);
+  // Back to the practitioner's times (still mid-reschedule, if moving). If the slot id
+  // didn't match a real slot we don't know whose it was, so search instead.
+  const back = found
+    ? `/practitioners/${found.practitioner.id}${rescheduleFromId ? `?${new URLSearchParams({ reschedule: rescheduleFromId })}` : ""}`
+    : "/search";
+  const backLink = (
+    <Link href={back} className="link mb-4 inline-flex min-h-11 items-center gap-1 text-sm">
+      <ArrowLeftIcon width={16} height={16} /> {found ? "Back to times" : "Back to search"}
+    </Link>
+  );
+
   if (!found || found.taken) {
     return (
       <div className="mx-auto max-w-xl">
