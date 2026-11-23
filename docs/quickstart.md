@@ -14,7 +14,8 @@ Install dependencies
 pnpm i
 ```
 
-Create your local env file (gitignored)
+Create your local env file (gitignored). It already has working values for local dev,
+including a dev-only `BETTER_AUTH_SECRET`.
 ```bash
 cp .env.example .env
 ```
@@ -24,10 +25,48 @@ Start Postgres and Mailpit
 docker compose up -d
 ```
 
+Create the database tables (users, sessions, appointments, ...). Run this again whenever
+you pull new files in `drizzle/`, or pages crash with errors like `relation "users" does not exist`.
+```bash
+pnpm exec drizzle-kit migrate
+```
+
+Fill the database with test data. This WIPES local data first.
+```bash
+pnpm db:seed
+```
+Seeded logins all use the password `password123`:
+`patient@caretrack.test`, `practitioner@caretrack.test`, `staff@caretrack.test`, `admin@caretrack.test`.
+
 Run dev
 ```bash
 pnpm dev
 ```
+
+## If the server crashes
+
+| Symptom | Fix |
+|---|---|
+| `relation "..." does not exist` | Run `pnpm exec drizzle-kit migrate` |
+| `ECONNREFUSED` on port 5432 | Postgres isn't running: `docker compose up -d` (on macOS with Colima, run `colima start` first) |
+| Better Auth error about a missing secret | Your `.env` predates the dev secret: copy the `BETTER_AUTH_SECRET` line from `.env.example` and restart `pnpm dev` |
+| Can't log in with the test accounts | Run `pnpm db:seed` |
+
+## Deployed server (Vercel)
+
+GitHub Actions secrets don't reach the deployed app; CI only lints, tests and builds.
+Set these in Vercel → Settings → Environment Variables, then redeploy:
+
+- `BETTER_AUTH_SECRET`: a fresh value from `openssl rand -base64 32`, never the dev one from `.env.example`
+- `BETTER_AUTH_URL`: the deployed address, e.g. `https://<app>.vercel.app`
+- `DATABASE_URL`: the production (Neon) connection string
+
+Nothing runs migrations on deploy. After pulling new files in `drizzle/`, migrate the
+production database from your machine:
+```bash
+DATABASE_URL="<production url>" pnpm exec drizzle-kit migrate
+```
+Use Neon's **unpooled** (direct) connection string here; migrations don't work well through the pooler.
 
 ## Local services
 
