@@ -50,7 +50,7 @@ Run `pnpm db:migrate` again whenever a pull adds a file to `drizzle/`.
 | `extension "btree_gist" is not available` | Your Postgres doesn't ship the `btree_gist` extension (migration 0003 needs it). | Use the docker-compose Postgres or Neon, which both include it. |
 | `ECONNREFUSED 127.0.0.1:5432` | Postgres isn't running, or `DATABASE_URL` has the wrong port. | `docker compose up -d`; make sure `POSTGRES_PORT` and the port in `DATABASE_URL` match. |
 | `[Better Auth] ... default secret` / `BETTER_AUTH_SECRET` missing | Secret not set in `.env` or on the host. | Set `BETTER_AUTH_SECRET`. |
-| `Invalid origin` on log-in | `BETTER_AUTH_URL` doesn't match the URL in the browser (e.g. a Vercel preview URL). | Set `BETTER_AUTH_URL` to the URL the site is served from. |
+| `Invalid origin` on log-in | `BETTER_AUTH_URL` doesn't match the URL in the browser. Vercel previews handle this themselves (see [Preview deploys](#preview-deploys)). | Set `BETTER_AUTH_URL` to the URL the site is served from. |
 
 Avoid `npx @better-auth/cli generate` and `migrate`. The schema here is written by hand
 (plural table names, uuid ids, a `role` field), and the CLI would generate a different
@@ -80,6 +80,28 @@ apply it to Neon from your machine:
 
 ```bash
 DATABASE_URL_UNPOOLED="<neon direct url>" pnpm db:migrate
+```
+
+### Preview deploys
+
+The Vercel GitHub app builds every PR and comments its preview URL. Previews sit behind
+Vercel Authentication, so only team members can open them.
+
+Previews must never use the production database. Create a Neon branch named `preview`
+(Neon → Branches → New branch, from `main`) and, in Vercel, add `DATABASE_URL` and
+`DATABASE_URL_UNPOOLED` for it scoped to the **Preview** environment only. Give Preview its
+own `BETTER_AUTH_SECRET` too. All previews share that one branch.
+
+`BETTER_AUTH_URL` isn't needed for Preview: `lib/better-auth.ts` uses the
+`VERCEL_BRANCH_URL` and `VERCEL_URL` that Vercel sets on each preview, and trusts only
+those two hosts.
+
+Migrate the preview branch like production, with its own direct URL. To get test
+accounts there, seed it (only the preview branch, never production):
+
+```bash
+DATABASE_URL_UNPOOLED="<preview direct url>" pnpm db:migrate
+DATABASE_URL_UNPOOLED="<preview direct url>" pnpm db:seed
 ```
 
 Never run `pnpm db:seed` against production. It wipes the database, and it refuses to
