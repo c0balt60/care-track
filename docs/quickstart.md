@@ -61,6 +61,8 @@ Set these in Vercel → Settings → Environment Variables, then redeploy:
 - `BETTER_AUTH_URL`: the deployed address, e.g. `https://<app>.vercel.app`
 - `DATABASE_URL`: the production (Neon) connection string
 
+Previews need their own database and secret; see [Preview deploys](auth-setup.md#preview-deploys).
+
 Nothing runs migrations on deploy. After pulling new files in `drizzle/`, migrate the
 production database from your machine:
 ```bash
