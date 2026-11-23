@@ -10,8 +10,19 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { db } from "./db";
 import * as schema from "./db/schema";
 
+// Vercel previews get a new URL per push, so a fixed BETTER_AUTH_URL can't match them and
+// log-in fails with "Invalid origin". On a preview, use the branch URL Vercel sets and also
+// trust the per-commit URL. Only this deployment's own hosts, never "*.vercel.app", which
+// would trust every other Vercel site too. Elsewhere these are unset and BETTER_AUTH_URL wins.
+const { VERCEL_ENV, VERCEL_URL, VERCEL_BRANCH_URL } = process.env;
+const isPreview = VERCEL_ENV === "preview";
+
 export const auth = betterAuth({
-  // BETTER_AUTH_SECRET (signs cookies) and BETTER_AUTH_URL are read from the environment.
+  // BETTER_AUTH_SECRET (signs cookies) is read from the environment; so is BETTER_AUTH_URL
+  // outside Vercel previews.
+  baseURL: isPreview ? `https://${VERCEL_BRANCH_URL ?? VERCEL_URL}` : undefined,
+  trustedOrigins: isPreview && VERCEL_URL ? [`https://${VERCEL_URL}`] : [],
+
   database: drizzleAdapter(db, {
     provider: "pg",
     schema,
