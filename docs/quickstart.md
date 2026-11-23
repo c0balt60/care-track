@@ -50,7 +50,7 @@ pnpm dev
 | `relation "..." does not exist` | Run `pnpm exec drizzle-kit migrate` |
 | `ECONNREFUSED` on port 5432 | Postgres isn't running: `docker compose up -d` (on macOS with Colima, run `colima start` first) |
 | Better Auth error about a missing secret | Your `.env` predates the dev secret: copy the `BETTER_AUTH_SECRET` line from `.env.example` and restart `pnpm dev` |
-| Can't log in with the test accounts | Run `pnpm db:seed` |
+| Can't log in with the test accounts | Run `pnpm db:seed`. **It wipes every table** (appointments, payments, ...), so only run it against your local Docker database, never one with data you want to keep |
 
 ## Deployed server (Vercel)
 
@@ -64,9 +64,14 @@ Set these in Vercel → Settings → Environment Variables, then redeploy:
 Nothing runs migrations on deploy. After pulling new files in `drizzle/`, migrate the
 production database from your machine:
 ```bash
-DATABASE_URL="<production url>" pnpm exec drizzle-kit migrate
+DATABASE_URL_UNPOOLED="<production unpooled url>" pnpm exec drizzle-kit migrate
 ```
-Use Neon's **unpooled** (direct) connection string here; migrations don't work well through the pooler.
+Use Neon's **unpooled** (direct) connection string; migrations don't work well through the pooler.
+Set `DATABASE_URL_UNPOOLED`, not `DATABASE_URL`: `drizzle.config.ts` prefers it, so if it's
+already set in your environment (e.g. from `vercel env pull`), setting only `DATABASE_URL`
+would quietly migrate whatever database that points to instead.
+
+Each Vercel environment (Production, Preview) should get its own generated `BETTER_AUTH_SECRET`.
 
 ## Local services
 
