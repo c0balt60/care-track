@@ -29,11 +29,21 @@ const updatedAt = () =>
 //Keep these in sync with the types in lib/mock-data.ts
 export const ROLES = ["patient", "practitioner", "staff"] as const;
 export const USER_ROLES = [...ROLES, "admin"] as const;
-export const APPOINTMENT_STATUSES = ["pending", "confirmed", "declined", "cancelled", "completed"] as const;
+/**
+ * "awaiting_payment" is a slot held while the patient pays the deposit on Stripe
+ * (PAY-1 #29). It blocks the time like any live appointment, but only the patient's
+ * return from Stripe turns it into a real booking (lib/payments.ts). Lists and
+ * dashboards never ask for it, so nobody else sees it.
+ */
+export const APPOINTMENT_STATUSES = ["awaiting_payment", "pending", "confirmed", "declined", "cancelled", "completed"] as const;
 export const BOOKING_MODES = ["instant", "approval"] as const;
 export const BOOKED_BY = ["patient", "staff"] as const;
 export const APPOINTMENT_EVENT_TYPES = ["booked", "confirmed", "declined", "cancelled", "completed", "rescheduled"] as const;
-export const PAYMENT_STATUSES = ["pending", "succeeded", "failed", "refunded"] as const;
+/**
+ * pending: Checkout not finished. authorized: card held, charged when the practitioner
+ * approves (approval mode). succeeded: charged. cancelled: hold released without charging.
+ */
+export const PAYMENT_STATUSES = ["pending", "authorized", "succeeded", "failed", "refunded", "cancelled"] as const;
 
 /** Builds `col IN ('a', 'b')` for a check constraint. */
 const oneOf = (column: string, values: readonly string[]) =>
@@ -333,6 +343,7 @@ export const payments = pgTable(
     currency: text("currency").notNull().default("USD"),
     status: text("status", { enum: PAYMENT_STATUSES }).notNull().default("pending"),
     provider: text("provider"),
+    /** For provider "stripe": the Checkout Session id (cs_...). */
     providerRef: text("provider_ref"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
