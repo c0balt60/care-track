@@ -1,10 +1,15 @@
+import { and, asc, eq, gte } from "drizzle-orm";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PlusIcon } from "@/components/icons";
-import { Field, Notice, noticeText, PageHeader, param } from "@/components/ui";
-import { addDays, dayKey, formatDayKey, formatZone } from "@/lib/dates";
-import { requireRole } from "@/lib/auth";
-import { demoViewer, getPractitioner, slotsFor, today } from "@/lib/mock-data";
+import { Notice, noticeText, PageHeader, param } from "@/components/ui";
+import { getViewerAs, requireRole } from "@/lib/auth";
+import { dayKey, formatDayKey, formatZone } from "@/lib/dates";
+import { db } from "@/lib/db";
+import { availabilityExceptions, availabilityRules, practitioners } from "@/lib/db/schema";
+import { openSlotsFor } from "@/lib/open-slots";
+import { addException, removeException, saveAvailability } from "./actions";
 
 const days: [number, string][] = [[1, "Monday"], [2, "Tuesday"], [3, "Wednesday"], [4, "Thursday"], [5, "Friday"], [6, "Saturday"], [0, "Sunday"]];
 
@@ -14,17 +19,59 @@ const t12 = (hhmm: string) =>
 
 const option = "flex cursor-pointer items-start gap-3 rounded-lg border border-line p-3 has-checked:border-accent has-checked:bg-accent-soft";
 
+const errors: Record<string, string> = {
+  "bad-mode": "Choose how bookings are handled.",
+  "bad-slot-length": "Slot length must be between 1 and 480 minutes.",
+  "bad-time": "Enter both a start and an end time.",
+  "bad-range": "The end time must be after the start time.",
+  overlap: "Hours on the same day can't overlap.",
+  "bad-date": "Enter a valid date.",
+  "past-date": "Pick a date that isn't in the past.",
+  "bad-kind": "Choose closed all day or different hours.",
+  "note-too-long": "Keep the note under 200 characters.",
+  "no-practitioner": "Only practitioners can edit availability.",
+};
+
 export default async function Availability({ searchParams }: PageProps<"/availability">) {
-  const viewer = demoViewer(await requireRole("practitioner"));
+  await requireRole("practitioner");
+  const viewer = await getViewerAs("practitioner");
+  if (!viewer) redirect("/dashboard");
   const sp = await searchParams;
 
-  const p = getPractitioner(viewer.practitionerId)!;
+  const [p] = await db.select().from(practitioners).where(eq(practitioners.id, viewer.practitionerId)).limit(1);
+  if (!p) redirect("/dashboard");
+
+  const todayKey = dayKey(new Date(), p.timeZone);
+  const [rules, exceptionRows, open] = await Promise.all([
+    db.select().from(availabilityRules).where(eq(availabilityRules.practitionerId, p.id)).orderBy(asc(availabilityRules.startTime)),
+    db
+      .select()
+      .from(availabilityExceptions)
+      .where(and(eq(availabilityExceptions.practitionerId, p.id), gte(availabilityExceptions.date, todayKey)))
+      .orderBy(asc(availabilityExceptions.date), asc(availabilityExceptions.startTime)),
+    openSlotsFor([p], { days: 14 }),
+  ]);
+
+  // Postgres returns "09:00:00"; the time inputs and t12() want "09:00".
+  const hoursOf = (d: number): [string, string][] =>
+    rules.filter((r) => r.weekday === d).map((r) => [r.startTime.slice(0, 5), r.endTime.slice(0, 5)]);
+
+  // One entry per date, in case older data has several rows for the same day.
+  const exceptions = new Map<string, { date: string; hours: [string, string][]; note: string }>();
+  for (const e of exceptionRows) {
+    const entry = exceptions.get(e.date) ?? { date: e.date, hours: [], note: e.note };
+    if (e.startTime && e.endTime) entry.hours.push([e.startTime.slice(0, 5), e.endTime.slice(0, 5)]);
+    exceptions.set(e.date, entry);
+  }
+
+  const soon = open.get(p.id)?.length ?? 0;
   const zone = formatZone(new Date(), p.timeZone);
-  const soon = slotsFor(p).filter((s) => dayKey(s.start, p.timeZone) < addDays(today(p.timeZone), 14)).length;
+  const slotOptions = [...new Set([15, 20, 30, 45, 60, p.slotMinutes])].sort((a, b) => a - b);
   const notice = noticeText(
-    { saved: "Changes saved.", added: "Exception added.", removed: "Exception removed." },
+    { saved: "Changes saved.", added: "Exception saved.", removed: "Exception removed." },
     param(sp.notice),
   );
+  const error = noticeText(errors, param(sp.error));
 
   return (
     <>
@@ -34,9 +81,9 @@ export default async function Availability({ searchParams }: PageProps<"/availab
         actions={<button form="availability" className="btn btn-primary">Save changes</button>}
       />
       {notice && <Notice>{notice}</Notice>}
+      {error && <Notice>{error}</Notice>}
 
-      {/* Prototype: posts back here. The real form calls the team's save action. */}
-      <form id="availability" method="post" action="/availability?notice=saved" className="space-y-6">
+      <form id="availability" action={saveAvailability} className="space-y-6">
         <section aria-labelledby="booking" className="card p-5">
           <h2 id="booking" className="text-lg font-semibold">Booking</h2>
           <fieldset className="mt-4">
@@ -55,16 +102,19 @@ export default async function Availability({ searchParams }: PageProps<"/availab
           <div className="mt-4 max-w-48">
             <label htmlFor="slotMinutes" className="label">Slot length</label>
             <select id="slotMinutes" name="slotMinutes" defaultValue={p.slotMinutes} className="input">
-              {[15, 20, 30, 45, 60].map((m) => <option key={m} value={m}>{m} min</option>)}
+              {slotOptions.map((m) => <option key={m} value={m}>{m} min</option>)}
             </select>
           </div>
         </section>
 
         <section aria-labelledby="weekly" className="card p-5">
           <h2 id="weekly" className="text-lg font-semibold">Weekly hours</h2>
+          <p className="mt-1 text-sm text-muted">To add a split shift, fill in the spare row on that day. Blank rows are ignored.</p>
           <ul className="mt-2 divide-y divide-line">
             {days.map(([d, name]) => {
-              const ranges = p.hours[d] ?? [];
+              const ranges = hoursOf(d);
+              // Open days get their hours plus one spare row; closed days get a 9–5 starting point.
+              const rows: [string, string][] = ranges.length ? [...ranges, ["", ""]] : [["09:00", "17:00"]];
               return (
                 // Unchecking a day hides its hours with CSS (:has), no JavaScript.
                 <li key={d} className="group flex flex-wrap items-center gap-x-4 gap-y-2 py-3">
@@ -74,7 +124,7 @@ export default async function Availability({ searchParams }: PageProps<"/availab
                   </label>
                   <span className="text-muted group-has-checked:hidden">Unavailable</span>
                   <div className="hidden flex-wrap items-center gap-2 group-has-checked:flex">
-                    {(ranges.length ? ranges : [["09:00", "17:00"]]).map(([from, to], i) => (
+                    {rows.map(([from, to], i) => (
                       <span key={i} className="flex items-center gap-1">
                         <label htmlFor={`d${d}-${i}-from`} className="sr-only">{name} from</label>
                         <input type="time" id={`d${d}-${i}-from`} name={`d${d}-${i}-from`} defaultValue={from} className="input w-auto" />
@@ -83,9 +133,6 @@ export default async function Availability({ searchParams }: PageProps<"/availab
                         <input type="time" id={`d${d}-${i}-to`} name={`d${d}-${i}-to`} defaultValue={to} className="input w-auto" />
                       </span>
                     ))}
-                    <button type="button" className="btn btn-secondary px-3" aria-label={`Add hours on ${name}`}>
-                      <PlusIcon />
-                    </button>
                   </div>
                 </li>
               );
@@ -105,10 +152,12 @@ export default async function Availability({ searchParams }: PageProps<"/availab
             text="Close for a day, or set different hours for one date."
             confirm="Add exception"
             cancel="Cancel"
-            action="/availability?notice=added"
-            method="post"
+            action={addException}
           >
-            <Field label="Date" id="date" type="date" min={today(p.timeZone)} required />
+            <div>
+              <label htmlFor="exDate" className="label">Date</label>
+              <input type="date" id="exDate" name="date" min={todayKey} required className="input" />
+            </div>
             <fieldset className="group space-y-2">
               <legend className="label">That day</legend>
               <label className="flex min-h-11 items-center gap-3"><input type="radio" name="kind" value="closed" defaultChecked className="size-5" /> Closed all day</label>
@@ -121,27 +170,33 @@ export default async function Availability({ searchParams }: PageProps<"/availab
                 <input type="time" id="exTo" name="to" defaultValue="14:00" className="input w-auto" />
               </div>
             </fieldset>
-            <Field label="Note (optional)" id="note" placeholder="e.g. Holiday" />
+            <div>
+              <label htmlFor="exNote" className="label">Note (optional)</label>
+              <input id="exNote" name="note" maxLength={200} placeholder="e.g. Holiday" className="input" />
+            </div>
           </ConfirmDialog>
         </div>
 
+        {exceptions.size === 0 && <p className="mt-2 text-muted">No upcoming exceptions.</p>}
         <ul className="mt-2 divide-y divide-line">
-          {p.exceptions.map((e) => (
-            <li key={e.day} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3">
-              <span className="w-36 font-medium">{formatDayKey(addDays(today(p.timeZone), e.day))}</span>
+          {[...exceptions.values()].map((e) => (
+            <li key={e.date} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3">
+              <span className="w-36 font-medium">{formatDayKey(e.date)}</span>
               <span className="flex-1 text-muted">
-                {e.hours.length ? `${e.hours.map(([f, t]) => `${t12(f)}–${t12(t)}`).join(", ")} only` : "Closed"} · {e.note}
+                {e.hours.length ? `${e.hours.map(([f, t]) => `${t12(f)}–${t12(t)}`).join(", ")} only` : "Closed"}
+                {e.note && ` · ${e.note}`}
               </span>
               <ConfirmDialog
-                id={`remove-${e.day}`}
+                id={`remove-${e.date}`}
                 trigger="Remove"
                 title="Remove this exception?"
                 text="Your usual weekly hours apply on that day again."
                 confirm="Remove"
                 danger
-                action="/availability?notice=removed"
-                method="post"
-              />
+                action={removeException}
+              >
+                <input type="hidden" name="date" value={e.date} />
+              </ConfirmDialog>
             </li>
           ))}
         </ul>
