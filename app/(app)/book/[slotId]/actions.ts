@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getViewer, getViewerAs } from "@/lib/auth";
 import { bookSlot } from "@/lib/booking";
+import { after } from "next/server";
+import { notifyAppointment } from "@/lib/appointment-emails";
 
 /**
  * Books the slot for the signed-in patient. Bound to the slot id, and to the
@@ -23,6 +25,7 @@ export async function bookAppointment(slotId: string, rescheduleFromId: string |
 
   const result = await bookSlot(patient, slotId, formData.get("reason"), new Date(), { rescheduleFromId });
   if (!result.ok) redirect(`${here}${join}error=${result.error}`);
+  after(() => notifyAppointment(result.appointmentId));
 
   revalidatePath("/appointments");
   revalidatePath("/dashboard");

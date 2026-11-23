@@ -10,6 +10,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getViewerAs } from "@/lib/auth";
 import { approve, cancel, decline } from "@/lib/appointments";
+import { after } from "next/server";
+import { notifyAppointment } from "@/lib/appointment-emails";
 
 type Outcome = Awaited<ReturnType<typeof approve>>;
 
@@ -21,6 +23,7 @@ async function viewerOrLogin(id: string) {
 
 /** Refreshes every page that lists the appointment, then shows the result on its page. */
 function finish(id: string, result: Outcome, notice: string): never {
+  if (result.ok) after(() => notifyAppointment(id));
   const here = `/appointments/${id}`;
   revalidatePath(here);
   revalidatePath("/appointments");
