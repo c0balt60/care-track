@@ -270,6 +270,11 @@ export const appointments = pgTable(
     rescheduledFromId: uuid("rescheduled_from_id").references((): AnyPgColumn => appointments.id, {
       onDelete: "set null",
     }),
+        /**
+     * When the reminder email was claimed (EML-3 #28). Null means no reminder yet. The cron
+     * route sets this before sending, so a second call can't send the same reminder again.
+     */
+    reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

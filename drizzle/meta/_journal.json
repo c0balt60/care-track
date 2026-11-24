@@ -50,6 +50,13 @@
       "when": 1794592252654,
       "tag": "0006_event_order_and_one_pending_move",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795478601790,
+      "tag": "0007_reminder_sent_at",
+      "breakpoints": true
     }
   ]
 }

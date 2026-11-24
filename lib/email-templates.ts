@@ -8,7 +8,7 @@
 // The link goes to the appointment page, which is behind the login.
 import { formatWhen } from "./dates";
 
-export type AppointmentEmailKind = "pending" | "confirmed" | "declined" | "cancelled" | "rescheduled";
+export type AppointmentEmailKind = "pending" | "confirmed" | "declined" | "cancelled" | "rescheduled"| "reminder";
 
 export type AppointmentEmailData = {
   kind: AppointmentEmailKind;
@@ -82,6 +82,8 @@ function content(d: AppointmentEmailData): { subject: string; lines: string[] } 
             : `Your appointment with ${who} has been rescheduled to ${when}.`,
         ],
       };
+    case "reminder":
+      return { subject: "Appointment reminder", lines: [`This is a reminder of your appointment with ${who} on ${when}.`] };
   }
 }
 
