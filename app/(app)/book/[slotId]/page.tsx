@@ -5,6 +5,7 @@ import { formatWhen } from "@/lib/dates";
 import { requireRole } from "@/lib/auth";
 import { loadAppointmentFor } from "@/lib/appointments";
 import { bookingErrors, loadBookableSlot, type BookingError } from "@/lib/booking";
+import { depositLabel } from "@/lib/payments";
 import { bookAppointment } from "./actions";
 
 // Patients book for themselves here, or move an appointment (?reschedule=<id>).
@@ -127,8 +128,15 @@ export default async function Book({ params, searchParams }: PageProps<"/book/[s
             <InfoIcon className="mt-px shrink-0 text-blue-700" width={18} height={18} />
             {approval ? `${p.name} reviews requests before confirming.` : "This time is confirmed right away."}
           </p>
+          {!moving && (
+            <p className="text-sm text-muted">
+              {approval
+                ? `A ${depositLabel} deposit is held on your card and charged only if ${p.name} accepts.`
+                : `You pay a ${depositLabel} deposit to book. Next you'll go to Stripe's secure payment page.`}
+            </p>
+          )}
           <button className="btn btn-primary w-full">
-            {moving ? (approval ? "Request new time" : "Move appointment") : approval ? "Request appointment" : "Book appointment"}
+            {moving ? (approval ? "Request new time" : "Move appointment") : "Continue to payment"}
           </button>
         </form>
       )}

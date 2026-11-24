@@ -15,6 +15,7 @@ import type { ReadyViewer } from "./auth";
 import { replaceOld, type Tx } from "./booking";
 import { db } from "./db";
 import { appointmentEvents, appointments, clinics, patients, practitioners } from "./db/schema";
+import { captureDeposit, releaseDeposit } from "./payments";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -161,8 +162,8 @@ const noteDiff = (field: string, note: string | null): AuditDiff =>
  * patient never holds both times or neither. If the old one is already gone
  * (cancelled meanwhile, or its time has passed), the request just stands alone.
  */
-export function approve(viewer: ActingViewer, id: string, now = new Date()) {
-  return changeStatus(viewer, id, "approve", now, (current) => ({
+export async function approve(viewer: ActingViewer, id: string, now = new Date()): Promise<Result> {
+  const result = await changeStatus(viewer, id, "approve", now, (current) => ({
     set: { status: "confirmed" },
     event: "confirmed",
     note: null,
@@ -172,19 +173,24 @@ export function approve(viewer: ActingViewer, id: string, now = new Date()) {
       ? (tx) => replaceOld(tx, current.rescheduledFromId!, viewer.userId, viewer.role, now)
       : undefined,
   }));
+  // Charge the deposit held at request time (PAY-1 #29). After the commit, so a Stripe error can't undo the approval.
+  if (result.ok) await captureDeposit(id);
+  return result;
 }
 
 /** Practitioner or staff turns down a pending request, with an optional note to the patient. */
 export async function decline(viewer: ActingViewer, id: string, noteInput: unknown, now = new Date()): Promise<Result> {
   const note = cleanNote(noteInput);
   if (!note.ok) return { ok: false, error: "note" };
-  return changeStatus(viewer, id, "decline", now, () => ({
+  const result = await changeStatus(viewer, id, "decline", now, () => ({
     set: { status: "declined", declineNote: note.value },
     event: "declined",
     note: note.value,
     auditAction: "appointment.decline",
     diff: { status: { from: "pending", to: "declined" }, ...noteDiff("declineNote", note.value) },
   }));
+  if (result.ok) await releaseDeposit(id);
+  return result;
 }
 
 /**
@@ -195,11 +201,14 @@ export async function cancel(viewer: ActingViewer, id: string, reasonInput: unkn
   const reason = cleanNote(reasonInput);
   if (!reason.ok) return { ok: false, error: "note" };
   if (cancelReasonRequired(viewer) && !reason.value) return { ok: false, error: "reason" };
-  return changeStatus(viewer, id, "cancel", now, (current) => ({
+  const result = await changeStatus(viewer, id, "cancel", now, (current) => ({
     set: { status: "cancelled", cancelledBy: viewer.role, cancelReason: reason.value },
     event: "cancelled",
     note: reason.value,
     auditAction: "appointment.cancel",
     diff: { status: { from: current.status, to: "cancelled" }, ...noteDiff("cancelReason", reason.value) },
   }));
+  // A withdrawn request releases its card hold. Refunding a cancelled confirmed booking is PAY-3 (#31).
+  if (result.ok && result.from === "pending") await releaseDeposit(id);
+  return result;
 }

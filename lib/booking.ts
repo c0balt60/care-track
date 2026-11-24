@@ -88,6 +88,8 @@ export const bookingErrors = {
   taken: "Someone just booked this time. Pick another time.",
   reason: "Tell us the reason for your visit (up to 1,000 characters).",
   staff: "Booking for a patient from the front desk isn't ready yet.",
+  payment: "We couldn't start the payment. Nothing was charged. Try again.",
+  payment_cancelled: "Payment cancelled, so the time wasn't booked. Nothing was charged.",
   reschedule: "That appointment can't be moved anymore. Check your appointments for its latest status.",
   reschedule_pending: "You already asked to move that appointment. Withdraw that request first to pick a different time.",
 };
@@ -130,22 +132,30 @@ class BookingRefused extends Error {
  * - approval mode: the new one is a pending request linked to the old one, which
  *   stays booked. approve() in lib/appointments.ts cancels the old one when the
  *   request is accepted; a decline or withdrawal leaves it alone.
+ *
+ * With `hold` (new bookings that need a deposit, PAY-1 #29), the appointment is
+ * inserted as "awaiting_payment" with no history yet: it only holds the time while
+ * the patient pays. settleHold() in lib/payments.ts makes it a real booking.
  */
 export async function bookSlot(
   patient: { userId: string; patientId: string },
   slotId: string,
   reasonInput: unknown,
   now = new Date(),
-  { rescheduleFromId }: { rescheduleFromId?: string | null } = {},
-): Promise<{ ok: true; appointmentId: string; status: "confirmed" | "pending" } | { ok: false; error: BookingError }> {
+  { rescheduleFromId, hold = false }: { rescheduleFromId?: string | null; hold?: boolean } = {},
+): Promise<
+  { ok: true; appointmentId: string; status: "confirmed" | "pending" | "awaiting_payment" } | { ok: false; error: BookingError }
+> {
   const reason = String(reasonInput ?? "").trim();
   if (!reason || reason.length > 1000) return { ok: false, error: "reason" };
   if (rescheduleFromId != null && !UUID.test(rescheduleFromId)) return { ok: false, error: "reschedule" };
+  // A move keeps the deposit already paid for the original appointment.
+  if (hold && rescheduleFromId) throw new Error("bookSlot: a reschedule can't be held for payment");
 
   const found = await loadBookableSlot(slotId, now);
   if (!found) return { ok: false, error: "slot" };
   const { practitioner, slot } = found;
-  const status = practitioner.bookingMode === "instant" ? "confirmed" : "pending";
+  const status = hold ? "awaiting_payment" : practitioner.bookingMode === "instant" ? "confirmed" : "pending";
 
   try {
     const id = await db.transaction(async (tx) => {
@@ -171,26 +181,7 @@ export async function bookSlot(
         })
         .returning({ id: appointments.id });
 
-      await tx.insert(appointmentEvents).values(
-        [
-          { appointmentId: appt.id, type: "booked" as const, actorUserId: patient.userId, actorRole: "patient" as const },
-          // Instant mode confirms in the same step, so the timeline shows both.
-          ...(status === "confirmed"
-            ? [{ appointmentId: appt.id, type: "confirmed" as const, actorUserId: null, actorRole: null }]
-            : []),
-        ],
-      );
-      await audit(
-        patient.userId,
-        "appointment.book",
-        "appointments",
-        appt.id,
-        {
-          status: { from: null, to: status },
-          ...(rescheduleFromId && { rescheduledFromId: { from: null, to: rescheduleFromId } }),
-        },
-        tx,
-      );
+      if (status !== "awaiting_payment") await recordBooked(tx, appt.id, patient.userId, status, rescheduleFromId);
       return appt.id;
     });
     return { ok: true, appointmentId: id, status };
@@ -205,6 +196,35 @@ export async function bookSlot(
 
 /** A transaction handle from db.transaction(). */
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * The history and audit rows for a new booking. Also used by settleHold() in
+ * lib/payments.ts, when a held appointment becomes a booking after payment.
+ */
+export async function recordBooked(
+  tx: Tx,
+  appointmentId: string,
+  patientUserId: string,
+  status: "confirmed" | "pending",
+  rescheduleFromId?: string | null,
+) {
+  await tx.insert(appointmentEvents).values([
+    { appointmentId, type: "booked" as const, actorUserId: patientUserId, actorRole: "patient" as const },
+    // Instant mode confirms in the same step, so the timeline shows both.
+    ...(status === "confirmed" ? [{ appointmentId, type: "confirmed" as const, actorUserId: null, actorRole: null }] : []),
+  ]);
+  await audit(
+    patientUserId,
+    "appointment.book",
+    "appointments",
+    appointmentId,
+    {
+      status: { from: null, to: status },
+      ...(rescheduleFromId && { rescheduledFromId: { from: null, to: rescheduleFromId } }),
+    },
+    tx,
+  );
+}
 
 /**
  * The appointment being moved must be the patient's, with the same practitioner,

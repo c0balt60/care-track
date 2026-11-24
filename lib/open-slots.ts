@@ -15,6 +15,7 @@ import { and, gt, gte, inArray, lt, notInArray } from "drizzle-orm";
 import { BOOKING_WINDOW_DAYS, slotIdFor } from "./booking";
 import { addDays, dayKey } from "./dates";
 import { db } from "./db";
+import { releaseStaleHolds } from "./payments";
 import { appointments, availabilityExceptions, availabilityRules, type practitioners } from "./db/schema";
 import { generateSlots } from "./slots";
 
@@ -44,6 +45,9 @@ export async function openSlotsFor(
   const result = new Map<string, OpenSlot[]>(list.map((p) => [p.id, []]));
   if (!list.length) return result;
   days = Math.min(days, BOOKING_WINDOW_DAYS);
+
+  // Holds abandoned on Stripe's payment page would otherwise hide their slot (PAY-1 #29).
+  await releaseStaleHolds(now);
 
   const ids = list.map((p) => p.id);
   // Each practitioner's window starts on "today" in their own zone, which can be

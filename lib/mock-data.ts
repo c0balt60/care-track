@@ -4,7 +4,7 @@
 import { addDays, dayKey, type DayKey, toMinutes, weekday, zoned } from "./dates";
 
 export type Role = "patient" | "practitioner" | "staff";
-export type Status = "pending" | "confirmed" | "declined" | "cancelled" | "completed";
+export type Status = "awaiting_payment" | "pending" | "confirmed" | "declined" | "cancelled" | "completed";
 type Hours = [from: string, to: string][];
 
 export type Clinic = {

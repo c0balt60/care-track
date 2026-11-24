@@ -28,6 +28,7 @@ export function PageHeader({ title, description, actions }: { title: ReactNode; 
 }
 
 const badges: Record<Status, [label: string, className: string]> = {
+  awaiting_payment: ["Awaiting payment", "bg-amber-50 text-amber-800"],
   pending: ["Pending", "bg-amber-50 text-amber-800"],
   confirmed: ["Confirmed", "bg-green-50 text-green-800"],
   declined: ["Declined", "bg-red-50 text-red-700"],
