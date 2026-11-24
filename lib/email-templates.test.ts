@@ -21,6 +21,7 @@ const kinds: [AppointmentEmailKind, RegExp][] = [
   ["declined", /declined/i],
   ["cancelled", /cancelled/i],
   ["rescheduled", /rescheduled/i],
+  ["reminder", /reminder/i],
 ];
 
 describe("appointmentEmail", () => {

@@ -19,8 +19,7 @@ export function appointmentLink(appointmentId: string) {
 }
 
 /** Error text can echo an address back (SMTP does), so strip anything email-shaped before logging. */
-const scrub = (s: string) => s.replace(/\S+@\S+/g, "[email]");
-
+export const scrub = (s: string) => s.replace(/\S+@\S+/g, "[email]");
 export async function notifyAppointment(appointmentId: string): Promise<void> {
   try {
     const [row] = await db
