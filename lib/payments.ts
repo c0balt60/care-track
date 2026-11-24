@@ -24,8 +24,12 @@
 // Instant mode charges the card right away. Approval mode only places a hold on it
 // (Stripe "manual capture"): approve() captures it, decline or withdraw releases it.
 // Card holds expire after about 7 days, after which a capture fails (see finishHold).
+//
+// Cancelling a confirmed booking refunds the charged deposit when refundsDeposit() in
+// ./appointment-rules says so (PAY-3 #31): see refundDeposit.
 import { and, eq, lt } from "drizzle-orm";
 import Stripe from "stripe";
+import { REFUND_CUTOFF_HOURS, refundsDeposit, type RulesViewer } from "./appointment-rules";
 import { recordBooked } from "./booking";
 import { db } from "./db";
 import { appointments, patients, payments, practitioners, stripeEvents } from "./db/schema";
@@ -273,6 +277,67 @@ export async function handleStripeEvent(event: Stripe.Event) {
   }
 }
 
+/** The PaymentIntent behind a completed Checkout Session. */
+async function intentIdFor(sessionId: string) {
+  const { payment_intent: intent } = await stripe().checkout.sessions.retrieve(sessionId);
+  return typeof intent === "string" ? intent : intent!.id;
+}
+
+type Payment = typeof payments.$inferSelect;
+
+/**
+ * The charged deposit behind an appointment, or null. A reschedule keeps the original
+ * deposit, so this follows rescheduledFromId back to the booking that paid it.
+ */
+export async function paidDeposit(appointmentId: string): Promise<Payment | null> {
+  let id: string | null = appointmentId;
+  while (id) {
+    const [row]: { payment: Payment | null; from: string | null }[] = await db
+      .select({ payment: payments, from: appointments.rescheduledFromId })
+      .from(appointments)
+      .leftJoin(payments, and(eq(payments.appointmentId, appointments.id), eq(payments.status, "succeeded")))
+      .where(eq(appointments.id, id))
+      .limit(1);
+    if (!row) return null;
+    if (row.payment) return row.payment;
+    id = row.from;
+  }
+  return null;
+}
+
+/**
+ * Refunds a cancelled appointment's deposit in full (PAY-3 #31). Runs after the
+ * cancellation has committed, like finishHold. The idempotency key makes a repeat call
+ * return Stripe's first refund instead of refunding twice.
+ */
+export async function refundDeposit(appointmentId: string) {
+  const payment = await paidDeposit(appointmentId);
+  if (!payment?.providerRef) return;
+  try {
+    const intentId = await intentIdFor(payment.providerRef);
+    await stripe().refunds.create({ payment_intent: intentId }, { idempotencyKey: `refund-${payment.id}` });
+  } catch (err) {
+    // ponytail: no retry. The payment stays "succeeded" and this log is the only trace; refund by hand from the Dashboard.
+    log.error({ err, appointmentId, paymentId: payment.id }, "could not refund deposit");
+    return;
+  }
+  await db
+    .update(payments)
+    .set({ status: "refunded" })
+    .where(and(eq(payments.id, payment.id), eq(payments.status, "succeeded")));
+}
+
+/** The cancel dialog's line about the deposit, or undefined when nothing was charged. */
+export async function cancelDepositNote(viewer: RulesViewer, appointmentId: string, startsAt: Date, now = new Date()) {
+  const deposit = await paidDeposit(appointmentId);
+  if (!deposit) return undefined;
+  const amount = (deposit.amountCents / 100).toLocaleString("en-US", { style: "currency", currency: deposit.currency });
+  if (viewer.role !== "patient") return `The patient's ${amount} deposit will be refunded.`;
+  return refundsDeposit(viewer, startsAt, now)
+    ? `Your ${amount} deposit will be refunded.`
+    : `It's less than ${REFUND_CUTOFF_HOURS} hours away, so your ${amount} deposit won't be refunded.`;
+}
+
 /** Approval mode: the practitioner accepted, so charge the held deposit. */
 export const captureDeposit = (appointmentId: string) => finishHold(appointmentId, "capture");
 
@@ -294,8 +359,7 @@ async function finishHold(appointmentId: string, action: "capture" | "cancel") {
 
   let status: (typeof payments.$inferSelect)["status"];
   try {
-    const session = await stripe().checkout.sessions.retrieve(payment.sessionId);
-    const intentId = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent!.id;
+    const intentId = await intentIdFor(payment.sessionId);
     if (action === "capture") await stripe().paymentIntents.capture(intentId);
     else await stripe().paymentIntents.cancel(intentId);
     status = action === "capture" ? "succeeded" : "cancelled";

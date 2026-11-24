@@ -42,7 +42,7 @@ export function RequestButtons({
 
 /** Cancel a confirmed appointment, or withdraw a pending request. */
 export function CancelButton({
-  id, summary, pending, reasonRequired, otherParty, action,
+  id, summary, pending, reasonRequired, otherParty, depositNote, action,
 }: {
   id: string;
   /** e.g. "Mon, Jan 7 at 10:00 AM with Dr. Grey." */
@@ -51,6 +51,8 @@ export function CancelButton({
   reasonRequired: boolean;
   /** Who will see the reason. */
   otherParty: string;
+  /** What happens to the deposit (cancelDepositNote in lib/payments.ts). */
+  depositNote?: string;
   action: ServerAction;
 }) {
   return (
@@ -64,6 +66,7 @@ export function CancelButton({
       danger
       action={action}
     >
+      {depositNote && <p className="text-sm">{depositNote}</p>}
       <div>
         <label htmlFor={`reason-${id}`} className="label">Reason{reasonRequired ? "" : " (optional)"}</label>
         <textarea id={`reason-${id}`} name="note" rows={3} maxLength={1000} required={reasonRequired} className="input" />

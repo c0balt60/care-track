@@ -8,6 +8,7 @@ import { appointmentErrors, loadAppointmentFor, type AppointmentError } from "@/
 import { audit } from "@/lib/audit";
 import { requireRole, type ReadyViewer } from "@/lib/auth";
 import { formatDay, formatWhen } from "@/lib/dates";
+import { cancelDepositNote } from "@/lib/payments";
 import { approveAppointment, cancelAppointment, declineAppointment } from "./actions";
 
 type Loaded = NonNullable<Awaited<ReturnType<typeof loadAppointmentFor>>>;
@@ -38,6 +39,7 @@ export default async function AppointmentDetail({ params, searchParams }: PagePr
   const when = formatWhen(a.startsAt, tz);
   const actions = allowedActions(viewer, { ...a, clinicId: p.clinicId });
   const pending = a.status === "pending";
+  const depositNote = actions.includes("cancel") && !pending ? await cancelDepositNote(viewer, a.id, a.startsAt) : undefined;
 
   const noticeKey = param(sp.notice);
   const notice = noticeKey && Object.hasOwn(notices, noticeKey) ? notices[noticeKey] : null;
@@ -148,6 +150,7 @@ export default async function AppointmentDetail({ params, searchParams }: PagePr
                 pending={pending}
                 reasonRequired={cancelReasonRequired(viewer)}
                 otherParty={patient.name}
+                depositNote={depositNote}
                 action={cancelAppointment.bind(null, a.id)}
               />
             )}

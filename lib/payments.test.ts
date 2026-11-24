@@ -6,12 +6,12 @@ import { eq } from "drizzle-orm";
 import Stripe from "stripe";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { approve, decline } from "./appointments";
+import { approve, cancel, decline } from "./appointments";
 import { bookSlot, slotIdFor } from "./booking";
 import { db } from "./db";
 import * as schema from "./db/schema";
 import { POST as webhook } from "@/app/api/stripe/webhook/route";
-import { DEPOSIT_CENTS, reconcileCheckout, releaseStaleHolds, startCheckout } from "./payments";
+import { cancelDepositNote, DEPOSIT_CENTS, reconcileCheckout, releaseStaleHolds, startCheckout } from "./payments";
 
 vi.mock("./db", async () => {
   const { PGlite } = await import("@electric-sql/pglite");
@@ -44,6 +44,7 @@ const stripeFake = vi.hoisted(() => {
       },
     },
     paymentIntents: { capture: vi.fn(async () => ({})), cancel: vi.fn(async () => ({})) },
+    refunds: { create: vi.fn(async () => ({ id: "re_1", status: "succeeded" })) },
   };
   return { sessions, fail, api };
 });
@@ -297,5 +298,58 @@ describe("webhook (PAY-2)", () => {
   it("ignores events it doesn't act on", async () => {
     expect((await post(event("customer.created", "cus_1", ""))).status).toBe(200);
     expect(await db.select().from(schema.stripeEvents)).toHaveLength(0);
+  });
+});
+
+describe("refund on cancel (PAY-3)", () => {
+  const DAYS_BEFORE = new Date(NOW.getTime() - 2 * 86_400_000); // 51 hours before TEN
+  const patientViewer = () => ({ ...alice, name: "alice", email: "alice@test", role: "patient" as const });
+  const clinicViewer = () => ({ userId: clinicUser.userId, name: "approval", email: "approval@test", role: "practitioner" as const, practitionerId: approval });
+
+  async function booked(practitionerId: string) {
+    const h = await hold(alice, practitionerId);
+    pay(h.sessionId, practitionerId === instant ? "succeeded" : "requires_capture");
+    await reconcileCheckout(h.id);
+    if (practitionerId === approval) await approve(clinicViewer(), h.id, NOW);
+    return h;
+  }
+
+  it("refunds a patient who cancels 24h or more ahead", async () => {
+    const h = await booked(instant);
+    expect(await cancelDepositNote(patientViewer(), h.id, TEN, DAYS_BEFORE)).toBe("Your $25.00 deposit will be refunded.");
+    expect(await cancel(patientViewer(), h.id, "", DAYS_BEFORE)).toMatchObject({ ok: true });
+    expect(api.refunds.create).toHaveBeenCalledWith({ payment_intent: `pi_${h.sessionId}` }, { idempotencyKey: expect.stringMatching(/^refund-/) });
+    expect(await payment(h.id)).toMatchObject({ status: "refunded" });
+  });
+
+  it("keeps the deposit when the patient cancels later than that", async () => {
+    const h = await booked(instant);
+    expect(await cancelDepositNote(patientViewer(), h.id, TEN, NOW)).toMatch(/won't be refunded/);
+    expect(await cancel(patientViewer(), h.id, "", NOW)).toMatchObject({ ok: true });
+    expect(api.refunds.create).not.toHaveBeenCalled();
+    expect(await payment(h.id)).toMatchObject({ status: "succeeded" });
+  });
+
+  it("always refunds when the clinic cancels", async () => {
+    const h = await booked(approval);
+    expect(await cancel(clinicViewer(), h.id, "Practitioner is ill", NOW)).toMatchObject({ ok: true });
+    expect(await payment(h.id)).toMatchObject({ status: "refunded" });
+  });
+
+  it("refunds the original deposit when a rescheduled appointment is cancelled", async () => {
+    const h = await booked(instant);
+    const later = new Date(TEN.getTime() + 86_400_000);
+    const moved = await bookSlot(alice, slotIdFor(instant, later), "Check-up", DAYS_BEFORE, { rescheduleFromId: h.id });
+    if (!moved.ok) throw new Error(moved.error);
+    expect(await cancel(patientViewer(), moved.appointmentId, "", DAYS_BEFORE)).toMatchObject({ ok: true });
+    expect(await payment(h.id)).toMatchObject({ status: "refunded" });
+  });
+
+  it("still cancels if Stripe refuses the refund, leaving the payment as charged", async () => {
+    const h = await booked(instant);
+    api.refunds.create.mockRejectedValueOnce(new Error("Stripe is down"));
+    expect(await cancel(patientViewer(), h.id, "", DAYS_BEFORE)).toMatchObject({ ok: true });
+    expect(await appointment(h.id)).toMatchObject({ status: "cancelled" });
+    expect(await payment(h.id)).toMatchObject({ status: "succeeded" });
   });
 });

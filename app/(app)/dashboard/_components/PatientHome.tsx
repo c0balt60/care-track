@@ -8,6 +8,7 @@ import { listAppointmentsFor } from "@/lib/appointment-lists";
 import { allowedActions, cancelReasonRequired } from "@/lib/appointment-rules";
 import type { ReadyViewer } from "@/lib/auth";
 import { formatWhen } from "@/lib/dates";
+import { cancelDepositNote } from "@/lib/payments";
 
 export default async function PatientHome({ viewer }: { viewer: ReadyViewer<"patient"> }) {
     const now = new Date();
@@ -27,6 +28,7 @@ export default async function PatientHome({ viewer }: { viewer: ReadyViewer<"pat
     if (next) {
         const { appointment: a, practitioner: p } = next;
         const actions = allowedActions(viewer, { ...a, clinicId: p.clinicId }, now);
+        const depositNote = actions.includes("cancel") ? await cancelDepositNote(viewer, a.id, a.startsAt, now) : undefined;
         // A waiting move request for this appointment is one of the pending rows.
         // Only one is allowed at a time (see bookSlot), so hide Reschedule meanwhile,
         // like the detail page does.
@@ -45,6 +47,7 @@ export default async function PatientHome({ viewer }: { viewer: ReadyViewer<"pat
                         pending={false}
                         reasonRequired={cancelReasonRequired(viewer)}
                         otherParty={p.name}
+                        depositNote={depositNote}
                         action={cancelAppointment.bind(null, a.id)}
                     />
                 )}

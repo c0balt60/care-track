@@ -9,13 +9,13 @@
 // update finds a matching row. The other gets error "stale" and the page reloads
 // with the latest state. Same idea as booking: let the database pick the winner.
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
-import { can, cancelReasonRequired, involves, type AppointmentAction } from "./appointment-rules";
+import { can, cancelReasonRequired, involves, refundsDeposit, type AppointmentAction } from "./appointment-rules";
 import { audit, type AuditDiff } from "./audit";
 import type { ReadyViewer } from "./auth";
 import { replaceOld, type Tx } from "./booking";
 import { db } from "./db";
 import { appointmentEvents, appointments, clinics, patients, practitioners } from "./db/schema";
-import { captureDeposit, releaseDeposit } from "./payments";
+import { captureDeposit, refundDeposit, releaseDeposit } from "./payments";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -201,14 +201,20 @@ export async function cancel(viewer: ActingViewer, id: string, reasonInput: unkn
   const reason = cleanNote(reasonInput);
   if (!reason.ok) return { ok: false, error: "note" };
   if (cancelReasonRequired(viewer) && !reason.value) return { ok: false, error: "reason" };
-  const result = await changeStatus(viewer, id, "cancel", now, (current) => ({
-    set: { status: "cancelled", cancelledBy: viewer.role, cancelReason: reason.value },
-    event: "cancelled",
-    note: reason.value,
-    auditAction: "appointment.cancel",
-    diff: { status: { from: current.status, to: "cancelled" }, ...noteDiff("cancelReason", reason.value) },
-  }));
-  // A withdrawn request releases its card hold. Refunding a cancelled confirmed booking is PAY-3 (#31).
-  if (result.ok && result.from === "pending") await releaseDeposit(id);
+  let refund = false;
+  const result = await changeStatus(viewer, id, "cancel", now, (current) => {
+    refund = current.status === "confirmed" && refundsDeposit(viewer, current.startsAt, now);
+    return {
+      set: { status: "cancelled", cancelledBy: viewer.role, cancelReason: reason.value },
+      event: "cancelled",
+      note: reason.value,
+      auditAction: "appointment.cancel",
+      diff: { status: { from: current.status, to: "cancelled" }, ...noteDiff("cancelReason", reason.value) },
+    };
+  });
+  if (!result.ok) return result;
+  // A withdrawn request releases its card hold; a cancelled booking is refunded inside the policy window (PAY-3 #31).
+  if (result.from === "pending") await releaseDeposit(id);
+  else if (refund) await refundDeposit(id);
   return result;
 }

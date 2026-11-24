@@ -87,3 +87,13 @@ export const can = (viewer: RulesViewer, a: RulesAppointment, action: Appointmen
  * were counting on. Patients may leave it blank.
  */
 export const cancelReasonRequired = (viewer: RulesViewer) => viewer.role !== "patient";
+
+/** A patient cancelling at least this long before the start gets the deposit back (PAY-3 #31). */
+export const REFUND_CUTOFF_HOURS = 24;
+
+/**
+ * Whether cancelling a confirmed appointment now refunds its deposit. Always when the
+ * clinic side cancels (the patient didn't cause it); for patients, only before the cutoff.
+ */
+export const refundsDeposit = (viewer: RulesViewer, startsAt: Date, now = new Date()) =>
+  viewer.role !== "patient" || startsAt.getTime() - now.getTime() >= REFUND_CUTOFF_HOURS * 3_600_000;
