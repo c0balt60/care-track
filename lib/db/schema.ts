@@ -357,6 +357,17 @@ export const payments = pgTable(
   ],
 );
 
+/**
+ * Stripe webhook events already handled (PAY-2 #30). Stripe may deliver an event more
+ * than once; the webhook inserts the id first, and a conflict means "seen it, skip".
+ */
+export const stripeEvents = pgTable("stripe_events", {
+  /** Stripe's event id (evt_...). */
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ---------- Audit ----------
 
 /**

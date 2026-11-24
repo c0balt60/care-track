@@ -7,7 +7,9 @@
 //   2. startCheckout() adds a "pending" payments row, creates a Checkout Session, and
 //      returns Stripe's hosted payment page URL. The action redirects there.
 //   3. Stripe sends the patient back to /api/stripe/checkout?appointment=<id> (with
-//      &cancelled=1 if they backed out). That route calls reconcileCheckout().
+//      &cancelled=1 if they backed out). That route calls reconcileCheckout(). So does
+//      the webhook (/api/stripe/webhook, handleStripeEvent), which covers patients who
+//      paid but never came back, and sessions that expired.
 //   4. reconcileCheckout() asks Stripe what happened. It never trusts the URL:
 //      - paid:          settleHold() turns the hold into a real booking (confirmed or pending)
 //      - expired:       releaseHold() deletes the hold, freeing the time
@@ -16,7 +18,7 @@
 //                       never be paid after we've given the time away
 //
 // Every step only acts on rows still "awaiting_payment" (or a payment still "authorized"),
-// so running any of it twice is a no-op. PAY-2's webhook (#30) can call reconcileCheckout()
+// so running any of it twice is a no-op: the webhook and the return page can both run it
 // for the same appointment without double-booking anything.
 //
 // Instant mode charges the card right away. Approval mode only places a hold on it
@@ -26,7 +28,7 @@ import { and, eq, lt } from "drizzle-orm";
 import Stripe from "stripe";
 import { recordBooked } from "./booking";
 import { db } from "./db";
-import { appointments, patients, payments, practitioners } from "./db/schema";
+import { appointments, patients, payments, practitioners, stripeEvents } from "./db/schema";
 import { logger } from "./logger";
 
 const log = logger.child({ module: "payments" });
@@ -207,8 +209,8 @@ async function releaseHold(appointmentId: string) {
  * checked with Stripe first: a hold that was actually paid becomes a booking instead.
  * Cheap when there's nothing stale: one indexed query, no Stripe calls.
  *
- * ponytail: runs lazily from openSlotsFor() and the book action. PAY-2's webhook
- * (checkout.session.expired) makes this a backstop rather than the main path.
+ * Runs lazily from openSlotsFor() and the book action. The webhook's
+ * checkout.session.expired is the main path; this is the backstop for missed deliveries.
  */
 export async function releaseStaleHolds(now = new Date()) {
   const cutoff = new Date(now.getTime() - HOLD_MINUTES * 60_000);
@@ -223,6 +225,51 @@ export async function releaseStaleHolds(now = new Date()) {
       // Never break the page that triggered the sweep; the next one retries.
       log.error({ err, appointmentId: id }, "could not release stale hold");
     }
+  }
+}
+
+/**
+ * Checks a webhook request really came from Stripe (signed with STRIPE_WEBHOOK_SECRET) and
+ * returns its event, or null if the signature is missing, wrong, or too old (replay window
+ * is Stripe's default 5 minutes). Throws if the secret isn't configured.
+ */
+export function verifyStripeEvent(body: string, signature: string | null): Stripe.Event | null {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret) throw new Error("payments: STRIPE_WEBHOOK_SECRET is not set");
+  if (!signature) return null;
+  try {
+    return stripe().webhooks.constructEvent(body, signature, secret);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Acts on a verified webhook event (PAY-2 #30). Both events just make reconcileCheckout()
+ * ask Stripe for the session's current state, so it never acts on a stale event body:
+ *   checkout.session.completed  the patient paid, maybe without coming back: book it
+ *   checkout.session.expired    nobody paid in time: free the slot
+ *
+ * Each event id is stored first, so a redelivered event is a no-op. If acting fails, the id
+ * is removed again and the error rethrown: the webhook answers 500 and Stripe retries.
+ */
+export async function handleStripeEvent(event: Stripe.Event) {
+  if (event.type !== "checkout.session.completed" && event.type !== "checkout.session.expired") return;
+  const appointmentId = event.data.object.metadata?.appointmentId;
+  if (!appointmentId) return; // A session this app didn't create.
+
+  const [claimed] = await db
+    .insert(stripeEvents)
+    .values({ id: event.id, type: event.type })
+    .onConflictDoNothing()
+    .returning({ id: stripeEvents.id });
+  if (!claimed) return;
+
+  try {
+    await reconcileCheckout(appointmentId);
+  } catch (err) {
+    await db.delete(stripeEvents).where(eq(stripeEvents.id, event.id));
+    throw err;
   }
 }
 

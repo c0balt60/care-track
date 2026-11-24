@@ -3,12 +3,14 @@
 // that keeps sessions in a Map. Tests set what "the patient did on Stripe's page" by
 // changing a session's status and payment intent.
 import { eq } from "drizzle-orm";
+import Stripe from "stripe";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { approve, decline } from "./appointments";
 import { bookSlot, slotIdFor } from "./booking";
 import { db } from "./db";
 import * as schema from "./db/schema";
+import { POST as webhook } from "@/app/api/stripe/webhook/route";
 import { DEPOSIT_CENTS, reconcileCheckout, releaseStaleHolds, startCheckout } from "./payments";
 
 vi.mock("./db", async () => {
@@ -45,8 +47,13 @@ const stripeFake = vi.hoisted(() => {
   };
   return { sessions, fail, api };
 });
-vi.mock("stripe", () => ({ default: vi.fn(function Stripe() { return stripeFake.api; }) }));
+// The fake API, plus Stripe's real signature checker so the webhook tests sign like Stripe does.
+vi.mock("stripe", async (importOriginal) => {
+  const Real = ((await importOriginal()) as { default: typeof import("stripe").default }).default;
+  return { default: vi.fn(function Stripe() { return { ...stripeFake.api, webhooks: Real.webhooks }; }) };
+});
 vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_fake");
+vi.stubEnv("STRIPE_WEBHOOK_SECRET", "whsec_test_fake");
 
 const { sessions, api } = stripeFake;
 const NOW = new Date("2030-01-07T12:00:00Z");
@@ -107,6 +114,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  await db.delete(schema.stripeEvents);
   await db.delete(schema.payments);
   await db.delete(schema.appointments);
   sessions.clear();
@@ -224,5 +232,70 @@ describe("approval mode", () => {
     expect(await approve(practitionerViewer(), h.id, NOW)).toMatchObject({ ok: true });
     expect(await appointment(h.id)).toMatchObject({ status: "confirmed" });
     expect(await payment(h.id)).toMatchObject({ status: "failed" });
+  });
+});
+
+describe("webhook (PAY-2)", () => {
+  let n = 0;
+  /** A Stripe event about a session, as Stripe would POST it. */
+  function event(type: string, sessionId: string, appointmentId: string) {
+    return JSON.stringify({ id: `evt_${++n}`, object: "event", type, data: { object: { id: sessionId, object: "checkout.session", metadata: { appointmentId } } } });
+  }
+  async function post(body: string, secret = "whsec_test_fake") {
+    const signature = (await vi.importActual<{ default: typeof Stripe }>("stripe")).default.webhooks.generateTestHeaderString({ payload: body, secret });
+    return webhook(new Request("http://localhost/api/stripe/webhook", { method: "POST", body, headers: { "stripe-signature": signature } }));
+  }
+
+  it("completed: books a patient who paid but never came back", async () => {
+    const h = await hold(alice, instant);
+    pay(h.sessionId, "succeeded");
+    expect((await post(event("checkout.session.completed", h.sessionId, h.id))).status).toBe(200);
+    expect(await appointment(h.id)).toMatchObject({ status: "confirmed" });
+    expect(await payment(h.id)).toMatchObject({ status: "succeeded" });
+  });
+
+  it("a replayed event is a no-op", async () => {
+    const h = await hold(alice, instant);
+    pay(h.sessionId, "succeeded");
+    const body = event("checkout.session.completed", h.sessionId, h.id);
+    await post(body);
+    vi.clearAllMocks();
+
+    expect((await post(body)).status).toBe(200);
+    expect(api.checkout.sessions.retrieve).not.toHaveBeenCalled();
+    expect(await events(h.id)).toEqual(["booked", "confirmed"]);
+    expect(await db.select().from(schema.stripeEvents)).toHaveLength(1);
+  });
+
+  it("expired: frees the time", async () => {
+    const h = await hold(alice, instant);
+    sessions.get(h.sessionId)!.status = "expired";
+    expect((await post(event("checkout.session.expired", h.sessionId, h.id))).status).toBe(200);
+    expect(await appointment(h.id)).toBeUndefined();
+  });
+
+  it("rejects a bad signature without touching anything", async () => {
+    const h = await hold(alice, instant);
+    pay(h.sessionId, "succeeded");
+    expect((await post(event("checkout.session.completed", h.sessionId, h.id), "whsec_wrong")).status).toBe(400);
+    expect(await appointment(h.id)).toMatchObject({ status: "awaiting_payment" });
+    expect(await db.select().from(schema.stripeEvents)).toHaveLength(0);
+  });
+
+  it("answers 500 when handling fails, so Stripe's retry runs it again", async () => {
+    const h = await hold(alice, instant);
+    pay(h.sessionId, "succeeded");
+    const body = event("checkout.session.completed", h.sessionId, h.id);
+    api.checkout.sessions.retrieve.mockRejectedValueOnce(new Error("Stripe is down"));
+
+    expect((await post(body)).status).toBe(500);
+    expect(await db.select().from(schema.stripeEvents)).toHaveLength(0);
+    expect((await post(body)).status).toBe(200);
+    expect(await appointment(h.id)).toMatchObject({ status: "confirmed" });
+  });
+
+  it("ignores events it doesn't act on", async () => {
+    expect((await post(event("customer.created", "cus_1", ""))).status).toBe(200);
+    expect(await db.select().from(schema.stripeEvents)).toHaveLength(0);
   });
 });
