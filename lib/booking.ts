@@ -14,11 +14,11 @@ import { addDays, dayKey } from "./dates";
 import { db } from "./db";
 import { appointmentEvents, appointments, availabilityExceptions, availabilityRules, clinics, practitioners } from "./db/schema";
 import { generateSlots } from "./slots";
+import { id, isId, parse, requiredText } from "./validation";
+import { z } from "zod";
 
 /** How far ahead patients can book. Matches the prototype (open question 4 in the outline). */
 export const BOOKING_WINDOW_DAYS = 28;
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Builds the id used in /book/[slotId] links. */
 export const slotIdFor = (practitionerId: string, start: Date) => `${practitionerId}_${start.getTime()}`;
@@ -26,7 +26,7 @@ export const slotIdFor = (practitionerId: string, start: Date) => `${practitione
 function parseSlotId(slotId: string): { practitionerId: string; startMs: number } | null {
   const [practitionerId, ms, ...rest] = decodeURIComponent(slotId).split("_");
   const startMs = Number(ms);
-  if (rest.length || !UUID.test(practitionerId ?? "") || !Number.isSafeInteger(startMs)) return null;
+  if (rest.length || !isId(practitionerId) || !Number.isSafeInteger(startMs)) return null;
   return { practitionerId, startMs };
 }
 
@@ -90,6 +90,7 @@ export const bookingErrors = {
   staff: "Booking for a patient from the front desk isn't ready yet.",
   reschedule: "That appointment can't be moved anymore. Check your appointments for its latest status.",
   reschedule_pending: "You already asked to move that appointment. Withdraw that request first to pick a different time.",
+  too_many: "Too many booking attempts. Try again later.",
 };
 export type BookingError = keyof typeof bookingErrors;
 
@@ -110,6 +111,9 @@ export function isPendingMoveClash(err: unknown) {
   const e = pgError(err);
   return e.code === "23505" && e.constraint === "appointments_one_pending_move";
 }
+
+/** What the patient sends with a booking. The slot id is checked by loadBookableSlot(). */
+const bookingInput = z.object({ reason: requiredText(1000, "reason"), rescheduleFromId: id("reschedule").nullish() });
 
 /** Thrown inside the transaction to roll it back and report a booking error. */
 class BookingRefused extends Error {
@@ -138,9 +142,9 @@ export async function bookSlot(
   now = new Date(),
   { rescheduleFromId }: { rescheduleFromId?: string | null } = {},
 ): Promise<{ ok: true; appointmentId: string; status: "confirmed" | "pending" } | { ok: false; error: BookingError }> {
-  const reason = String(reasonInput ?? "").trim();
-  if (!reason || reason.length > 1000) return { ok: false, error: "reason" };
-  if (rescheduleFromId != null && !UUID.test(rescheduleFromId)) return { ok: false, error: "reschedule" };
+  const input = parse<z.infer<typeof bookingInput>, BookingError>(bookingInput, { reason: reasonInput, rescheduleFromId });
+  if (!input.ok) return input;
+  const { reason } = input.data;
 
   const found = await loadBookableSlot(slotId, now);
   if (!found) return { ok: false, error: "slot" };

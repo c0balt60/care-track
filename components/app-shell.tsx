@@ -3,7 +3,7 @@ import { hasProfile, type Viewer } from "@/lib/auth";
 import { listAppointmentsFor } from "@/lib/appointment-lists";
 import { MenuIcon, XIcon } from "./icons";
 import { NavLink } from "./nav-link";
-import { PrototypeNotice } from "./prototype-notice";
+import { DemoNotice } from "./demo-notice";
 import { logOut } from "@/app/(auth)/actions";
 import { Logo } from "./ui";
 
@@ -66,7 +66,7 @@ export async function AppShell({ viewer, children }: { viewer: Viewer; children:
       </aside>
 
       <div className="min-w-0 flex-1">
-        <PrototypeNotice />
+        <DemoNotice />
         <header className="panel-dark sticky top-0 z-10 flex h-16 items-center justify-between px-4 lg:hidden">
           <Logo href="/dashboard" />
           <button type="button" popoverTarget="app-menu" className="btn btn-ghost">

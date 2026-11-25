@@ -15,8 +15,7 @@ import type { ReadyViewer } from "./auth";
 import { replaceOld, type Tx } from "./booking";
 import { db } from "./db";
 import { appointmentEvents, appointments, clinics, patients, practitioners } from "./db/schema";
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { isId, optionalText, parse } from "./validation";
 
 /** Longest cancel reason or decline note we keep. */
 export const NOTE_MAX = 1000;
@@ -30,7 +29,7 @@ type ActingViewer = ReadyViewer<"patient" | "practitioner" | "staff">;
  * a 404 either way doesn't reveal which appointment ids exist.
  */
 export async function loadAppointmentFor(viewer: ReadyViewer, id: string) {
-  if (!UUID.test(id)) return null;
+  if (!isId(id)) return null;
 
   const [row] = await db
     .select({ appointment: appointments, practitioner: practitioners, clinic: clinics, patient: patients })
@@ -87,12 +86,9 @@ export type AppointmentError = keyof typeof appointmentErrors;
 /** On success, `from` is the status the appointment had just before the change. */
 type Result = { ok: true; from: (typeof appointments.$inferSelect)["status"] } | { ok: false; error: AppointmentError | "not_found" };
 
-/** Trims a free-text field. "" becomes null; too long is an error. */
-function cleanNote(input: unknown): { ok: true; value: string | null } | { ok: false } {
-  const value = String(input ?? "").trim();
-  if (value.length > NOTE_MAX) return { ok: false };
-  return { ok: true, value: value || null };
-}
+/** A cancel reason or decline note: trimmed, "" becomes null, too long is error "note". */
+const noteSchema = optionalText(NOTE_MAX, "note").transform((v) => v || null);
+const cleanNote = (input: unknown) => parse<string | null, "note">(noteSchema, input);
 
 /**
  * The shared shape of every status change: load inside the transaction, check
@@ -114,7 +110,7 @@ async function changeStatus(
     after?: (tx: Tx) => Promise<unknown>;
   },
 ): Promise<Result> {
-  if (!UUID.test(id)) return { ok: false, error: "not_found" };
+  if (!isId(id)) return { ok: false, error: "not_found" };
 
   return db.transaction(async (tx) => {
     const [row] = await tx
@@ -177,13 +173,13 @@ export function approve(viewer: ActingViewer, id: string, now = new Date()) {
 /** Practitioner or staff turns down a pending request, with an optional note to the patient. */
 export async function decline(viewer: ActingViewer, id: string, noteInput: unknown, now = new Date()): Promise<Result> {
   const note = cleanNote(noteInput);
-  if (!note.ok) return { ok: false, error: "note" };
+  if (!note.ok) return note;
   return changeStatus(viewer, id, "decline", now, () => ({
-    set: { status: "declined", declineNote: note.value },
+    set: { status: "declined", declineNote: note.data },
     event: "declined",
-    note: note.value,
+    note: note.data,
     auditAction: "appointment.decline",
-    diff: { status: { from: "pending", to: "declined" }, ...noteDiff("declineNote", note.value) },
+    diff: { status: { from: "pending", to: "declined" }, ...noteDiff("declineNote", note.data) },
   }));
 }
 
@@ -193,13 +189,13 @@ export async function decline(viewer: ActingViewer, id: string, noteInput: unkno
  */
 export async function cancel(viewer: ActingViewer, id: string, reasonInput: unknown, now = new Date()): Promise<Result> {
   const reason = cleanNote(reasonInput);
-  if (!reason.ok) return { ok: false, error: "note" };
-  if (cancelReasonRequired(viewer) && !reason.value) return { ok: false, error: "reason" };
+  if (!reason.ok) return reason;
+  if (cancelReasonRequired(viewer) && !reason.data) return { ok: false, error: "reason" };
   return changeStatus(viewer, id, "cancel", now, (current) => ({
-    set: { status: "cancelled", cancelledBy: viewer.role, cancelReason: reason.value },
+    set: { status: "cancelled", cancelledBy: viewer.role, cancelReason: reason.data },
     event: "cancelled",
-    note: reason.value,
+    note: reason.data,
     auditAction: "appointment.cancel",
-    diff: { status: { from: current.status, to: "cancelled" }, ...noteDiff("cancelReason", reason.value) },
+    diff: { status: { from: current.status, to: "cancelled" }, ...noteDiff("cancelReason", reason.data) },
   }));
 }

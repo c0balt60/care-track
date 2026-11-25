@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { isId } from "@/lib/validation";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { InfoIcon, MapPinIcon } from "@/components/icons";
@@ -12,12 +13,11 @@ import { loadAppointmentFor } from "@/lib/appointments";
 import { getViewerAs } from "@/lib/auth";
 import { openSlotsFor } from "@/lib/open-slots";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function PractitionerProfile({ params, searchParams }: PageProps<"/practitioners/[id]">) {
   const { id } = await params;
   const sp = await searchParams;
-  if (!UUID.test(id)) notFound(); // Postgres throws on a malformed uuid
+  if (!isId(id)) notFound(); // Postgres throws on a malformed uuid
 
   const [row] = await db
     .select({

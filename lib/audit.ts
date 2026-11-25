@@ -38,6 +38,17 @@ export async function audit(
 }
 
 /**
+ * `{ field: { from, to } }` for the fields that changed, or null when none did. For public or
+ * business data (clinic details, a practitioner's profile). Patient details use redactedDiff.
+ * Arrays compare by content, so the same services in a new array aren't a change.
+ */
+export function diffOf<T extends Record<string, unknown>>(before: T, after: Partial<T>): AuditDiff | null {
+  const changed = Object.keys(after).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]));
+  if (!changed.length) return null;
+  return Object.fromEntries(changed.map((k) => [k, { from: before[k], to: after[k] }]));
+}
+
+/**
  * A diff that names the fields that changed but leaves their values out, for
  * patient details: the audit log shouldn't become a second copy of them.
  */

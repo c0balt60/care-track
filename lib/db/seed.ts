@@ -1,10 +1,11 @@
-// Resets the database and fills it with the prototype data from lib/mock-data.ts,
+// Resets the database and fills it with the fake data in ./seed-data.ts,
 // plus one signed-in user per role. Run with `pnpm db:seed`.
 import { sql } from "drizzle-orm";
 import { hashPassword } from "better-auth/crypto";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import * as mock from "../mock-data";
+import * as seed from "./seed-data";
+import { PATIENT_SLUG, PRACTITIONER_SLUG, STAFF_CLINIC_SLUG } from "./seed-data";
 import * as schema from "./schema";
  
 try {
@@ -22,6 +23,16 @@ if (process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "product
   console.error("Refusing to seed: this wipes every table and must never run against production.");
   process.exit(1);
 }
+// The check above can't see a laptop whose .env points at a shared database. Wiping
+// anything but a local one needs its host typed back, so it's never an accident (CMP-3 #41).
+const host = new URL(url).hostname;
+if (!["localhost", "127.0.0.1", "::1"].includes(host) && process.env.SEED_CONFIRM_HOST !== host) {
+  console.error(
+    `Refusing to seed ${host}: this wipes every table there.\n` +
+      `If it really is a throwaway database (like the Neon preview branch), run again with SEED_CONFIRM_HOST=${host}`,
+  );
+  process.exit(1);
+}
  
 const DAY = 24 * 60 * 60 * 1000;
  
@@ -32,22 +43,22 @@ function dateFromToday(days: number, timeZone: string) {
   );
 }
  
-/** Mock history labels → appointment_events.type */
+/** Seed history labels → appointment_events.type */
 function eventType(label: string): (typeof schema.APPOINTMENT_EVENT_TYPES)[number] {
   if (label.startsWith("Booked")) return "booked";
   const type = label.toLowerCase();
   if ((schema.APPOINTMENT_EVENT_TYPES as readonly string[]).includes(type)) return type as never;
-  throw new Error(`Unknown history label in mock data: "${label}"`);
+  throw new Error(`Unknown history label in seed data: "${label}"`);
 }
 
 /**
  * Who did each seeded event, by role. The history page reads a "confirmed" event
- * with no role as instant mode confirming on its own, and mock history only has
+ * with no role as instant mode confirming on its own, and seed history only has
  * "Confirmed" for approval-mode practitioners, so those must carry a role.
  */
 function seedActorRole(
   type: (typeof schema.APPOINTMENT_EVENT_TYPES)[number],
-  a: mock.Appointment,
+  a: seed.SeedAppointment,
 ): (typeof schema.ROLES)[number] | null {
   switch (type) {
     case "booked": return a.bookedBy === "staff" ? "staff" : "patient";
@@ -58,7 +69,7 @@ function seedActorRole(
   }
 }
  
-/** The people the prototype's role switcher signs in as, plus an admin. */
+/** One login per role. Who each one is in the seed data: PATIENT_SLUG etc. in ./seed-data.ts. */
 const seedUsers = [
   { key: "patient", email: "patient@caretrack.test", name: "Jordan Lee", role: "patient" },
   { key: "practitioner", email: "practitioner@caretrack.test", name: "Dr. Sam Rivera", role: "practitioner" },
@@ -67,11 +78,7 @@ const seedUsers = [
 ] as const;
 /** Every seed user's password. Dev only: this script refuses to run in production. */
 const SEED_PASSWORD = "password123";
-// Who each seed user is in the mock data (see `viewers` in lib/mock-data.ts).
-const PATIENT_SLUG = "jordan";
-const PRACTITIONER_SLUG = "rivera";
-const STAFF_CLINIC_SLUG = "northside";
- 
+
 async function main() {
   const pool = new Pool({ connectionString: url });
   const db = drizzle(pool, { schema });
@@ -99,23 +106,23 @@ async function main() {
  
     // ---- Clinics ----
     const clinicId = new Map<string, string>();
-    for (const c of mock.clinics) {
+    for (const c of seed.clinics) {
       const [row] = await tx
         .insert(schema.clinics)
         .values({ name: c.name, address: c.address, city: c.city, phone: c.phone, services: c.services, timeZone: c.timeZone })
         .returning({ id: schema.clinics.id });
-      clinicId.set(c.id, row.id);
+      clinicId.set(c.slug, row.id);
     }
     await tx.insert(schema.clinicStaff).values({ clinicId: clinicId.get(STAFF_CLINIC_SLUG)!, userId: userId.staff });
  
     // ---- Practitioners and their hours ----
     const practitionerId = new Map<string, string>();
-    for (const p of mock.practitioners) {
+    for (const p of seed.practitioners) {
       const [row] = await tx
         .insert(schema.practitioners)
         .values({
-          userId: p.id === PRACTITIONER_SLUG ? userId.practitioner : null,
-          clinicId: p.clinicId ? clinicId.get(p.clinicId)! : null,
+          userId: p.slug === PRACTITIONER_SLUG ? userId.practitioner : null,
+          clinicId: p.clinic ? clinicId.get(p.clinic)! : null,
           name: p.name,
           credentials: p.credentials,
           specialty: p.specialty,
@@ -128,7 +135,7 @@ async function main() {
           verifiedAt: new Date(), // unverified practitioners are hidden from search (ADM-2)
         })
         .returning({ id: schema.practitioners.id });
-      practitionerId.set(p.id, row.id);
+      practitionerId.set(p.slug, row.id);
  
       const rules = Object.entries(p.hours).flatMap(([weekday, ranges]) =>
         (ranges ?? []).map(([startTime, endTime]) => ({ practitionerId: row.id, weekday: Number(weekday), startTime, endTime })),
@@ -147,27 +154,27 @@ async function main() {
  
     // ---- Patients ----
     const patientId = new Map<string, string>();
-    for (const p of mock.patients) {
+    for (const p of seed.patients) {
       const [row] = await tx
         .insert(schema.patients)
         .values({
-          userId: p.id === PATIENT_SLUG ? userId.patient : null,
+          userId: p.slug === PATIENT_SLUG ? userId.patient : null,
           name: p.name,
           dob: p.dob || null,
           phone: p.phone || null,
         })
         .returning({ id: schema.patients.id });
-      patientId.set(p.id, row.id);
+      patientId.set(p.slug, row.id);
     }
- 
+
     // ---- Appointments and their history ----
-    const appts = mock.appointments();
+    const appts = seed.appointments();
     for (const a of appts) {
       const [row] = await tx
         .insert(schema.appointments)
         .values({
-          practitionerId: practitionerId.get(a.practitionerId)!,
-          patientId: patientId.get(a.patientId)!,
+          practitionerId: practitionerId.get(a.practitioner)!,
+          patientId: patientId.get(a.patient)!,
           startsAt: a.start,
           endsAt: a.end,
           status: a.status,
@@ -190,8 +197,8 @@ async function main() {
     }
  
     console.log(
-      `Seeded ${users.length} users, ${mock.clinics.length} clinic, ${mock.practitioners.length} practitioners, ` +
-        `${mock.patients.length} patients, ${appts.length} appointments.`,
+      `Seeded ${users.length} users, ${seed.clinics.length} clinic, ${seed.practitioners.length} practitioners, ` +
+        `${seed.patients.length} patients, ${appts.length} appointments.`,
     );
     console.log("Log in as:", seedUsers.map((u) => `${u.key} → ${u.email}`).join(", "), `(password: ${SEED_PASSWORD})`);
   });

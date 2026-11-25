@@ -1,4 +1,5 @@
-export type PatientDetails = { name: string; dob: string; phone: string };
+import { z } from "zod";
+import { dayKey, parse, phone, requiredText, type Parsed } from "./validation";
 
 /** Messages for /settings?error=. Only these keys are shown, so the URL can't inject text. */
 export const patientDetailErrors = {
@@ -8,20 +9,16 @@ export const patientDetailErrors = {
   "no-patient": "We couldn't find your patient record.",
 };
 
+/** A date of birth: a real date, not in the future, not before 1900. Also used by sign-up. */
+export const dob = (today: string, error = "dob") =>
+  dayKey(error).refine((d) => d <= today && d >= "1900-01-01", { error });
+
+const patientDetails = (today: string) =>
+  z.object({ name: requiredText(200, "name"), dob: dob(today), phone: phone() });
+export type PatientDetails = z.infer<ReturnType<typeof patientDetails>>;
+
 /** Checks the /settings form fields. Returns the cleaned values, or which field is wrong. */
-export function parsePatientDetails(form: FormData, today = new Date().toISOString().slice(0, 10)):
-  | { ok: true; data: PatientDetails }
-  | { ok: false; error: keyof typeof patientDetailErrors } {
-  const name = String(form.get("name") ?? "").trim();
-  const dob = String(form.get("dob") ?? "");
-  const phone = String(form.get("phone") ?? "").trim();
-
-  if (!name || name.length > 200) return { ok: false, error: "name" };
-  // <input type="date"> sends YYYY-MM-DD; the round-trip rejects impossible dates like 2026-02-31.
-  const t = Date.parse(dob);
-  const valid = /^\d{4}-\d{2}-\d{2}$/.test(dob) && !Number.isNaN(t) && new Date(t).toISOString().startsWith(dob);
-  if (!valid || dob > today || dob < "1900-01-01") return { ok: false, error: "dob" };
-  if (!/^\+?[\d\s().-]{7,20}$/.test(phone)) return { ok: false, error: "phone" };
-
-  return { ok: true, data: { name, dob, phone } };
-}
+export const parsePatientDetails = (
+  form: FormData,
+  today = new Date().toISOString().slice(0, 10),
+): Parsed<PatientDetails, keyof typeof patientDetailErrors> => parse(patientDetails(today), form);

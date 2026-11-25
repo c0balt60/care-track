@@ -9,6 +9,7 @@ import { nextCookies } from "better-auth/next-js";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { db } from "./db";
 import * as schema from "./db/schema";
+import { isPublicSecretOnDeployment } from "./public-secret";
 import { eq } from "drizzle-orm";
 import { APIError } from "better-auth/api";
 
@@ -18,6 +19,12 @@ import { APIError } from "better-auth/api";
 // would trust every other Vercel site too. Elsewhere these are unset and BETTER_AUTH_URL wins.
 const { VERCEL_ENV, VERCEL_URL, VERCEL_BRANCH_URL } = process.env;
 const isPreview = VERCEL_ENV === "preview";
+
+// The secret in .env.example is public; with it, anyone could forge a session cookie.
+// Refuse to start a Vercel deployment that copied it (lib/public-secret.ts).
+if (isPublicSecretOnDeployment(process.env.BETTER_AUTH_SECRET)) {
+  throw new Error("BETTER_AUTH_SECRET is the public value from .env.example. Set your own in Vercel: openssl rand -base64 32");
+}
 
 export const auth = betterAuth({
   // BETTER_AUTH_SECRET (signs cookies) is read from the environment; so is BETTER_AUTH_URL
@@ -36,7 +43,15 @@ export const auth = betterAuth({
   // must go through the signUp server action, which validates the profile fields and
   // creates the patients row. auth.api.signUpEmail() skips the HTTP router, so the
   // action still works.
-  disabledPaths: ["/sign-up/email"],
+  //
+  // Sign-in is blocked over HTTP for the same reason: the logIn action rate-limits it
+  // (HRD-2 #36), and an open /api/auth/sign-in/email would let scripts skip that limit.
+  //
+  // The rest are account endpoints the app doesn't use (CMP-1 #39). Left open, update-user let a
+  // signed-in user set any name or image (skipping our validation and the audit log), and
+  // verify-password / change-password allowed password guessing outside the login rate limit.
+  // When settings gets "change password", build it as a rate-limited server action.
+  disabledPaths: ["/sign-up/email", "/sign-in/email", "/update-user", "/verify-password", "/change-password"],
 
   emailAndPassword: {
     enabled: true,

@@ -36,12 +36,18 @@ function signUp(email: string, extra: Record<string, unknown> = {}) {
   return auth.api.signUpEmail({ body: { email, password: PASSWORD, name: "Test", ...extra } as never });
 }
 
-/** A request through the HTTP handler, the way the browser reaches /api/auth/*. */
-function post(path: string, body: unknown) {
+/** Signs in the way the logIn action does, returning the response headers (with set-cookie). */
+async function signIn(email: string, password = PASSWORD) {
+  const { headers } = await auth.api.signInEmail({ body: { email, password }, returnHeaders: true });
+  return headers;
+}
+
+/** A request through the HTTP handler, the way the browser reaches /api/auth/*. Pass `cookie` to send it signed in. */
+function post(path: string, body: unknown, cookie?: string) {
   return auth.handler(
     new Request(`${BASE_URL}/api/auth${path}`, {
       method: "POST",
-      headers: { "content-type": "application/json", origin: BASE_URL },
+      headers: { "content-type": "application/json", origin: BASE_URL, ...(cookie && { cookie }) },
       body: JSON.stringify(body),
     }),
   );
@@ -96,13 +102,48 @@ describe("HTTP routes", () => {
     expect(await db.select().from(schema.users)).toHaveLength(0);
   });
 
+  it("blocks sign-in over HTTP, so every log-in goes through the rate-limited logIn action", async () => {
+    await signUp("http@test.dev");
+    const res = await post("/sign-in/email", { email: "http@test.dev", password: PASSWORD });
+    expect(res.status).toBe(404);
+  });
+
+  // CMP-1 #39: these were open to any signed-in user. update-user took a 5,000-character
+  // name and a javascript: image URL, skipping the app's validation and the audit log;
+  // verify-password and change-password allowed password guessing outside the login rate limit.
+  it("blocks the account endpoints the app doesn't use, even when signed in", async () => {
+    await signUp("http@test.dev");
+    const cookie = ((await signIn("http@test.dev")).get("set-cookie") ?? "").split(";")[0];
+
+    for (const [path, body] of [
+      ["/update-user", { name: "x".repeat(5000), image: "javascript:alert(1)" }],
+      ["/verify-password", { password: "guess-1234" }],
+      ["/change-password", { currentPassword: "guess-1234", newPassword: "new-password-1" }],
+    ] as const) {
+      expect((await post(path, body, cookie)).status, path).toBe(404);
+    }
+    const [row] = await db.select().from(schema.users);
+    expect(row).toMatchObject({ name: "Test", image: null });
+  });
+
+  it("still won't let anyone set their role, or delete or re-email an account", async () => {
+    await signUp("http@test.dev");
+    const cookie = ((await signIn("http@test.dev")).get("set-cookie") ?? "").split(";")[0];
+
+    expect((await post("/update-user", { role: "admin" }, cookie)).status).not.toBe(200);
+    expect((await post("/delete-user", {}, cookie)).status).not.toBe(200);
+    expect((await post("/change-email", { newEmail: "other@test.dev" }, cookie)).status).not.toBe(200);
+    const [row] = await db.select().from(schema.users);
+    expect(row).toMatchObject({ role: "patient", email: "http@test.dev" });
+  });
+});
+
+describe("sign-in (server side, as the logIn action calls it)", () => {
   it("signs in with the right password and sets an httpOnly session cookie lasting 7 days", async () => {
     const { user } = await signUp("login@test.dev");
     await db.delete(schema.sessions); // drop the autoSignIn session so only the sign-in one is left
 
-    const res = await post("/sign-in/email", { email: "login@test.dev", password: PASSWORD });
-    expect(res.status).toBe(200);
-    expect(res.headers.get("set-cookie")).toMatch(/session_token=.*HttpOnly/i);
+    expect((await signIn("login@test.dev")).get("set-cookie")).toMatch(/session_token=.*HttpOnly/i);
 
     const [session] = await db.select().from(schema.sessions);
     expect(session.userId).toBe(user.id);
@@ -113,16 +154,14 @@ describe("HTTP routes", () => {
 
   it("refuses a wrong password", async () => {
     await signUp("login@test.dev");
-    const res = await post("/sign-in/email", { email: "login@test.dev", password: "wrong-password" });
-    expect(res.status).toBe(401);
+    await expect(signIn("login@test.dev", "wrong-password")).rejects.toMatchObject({ status: "UNAUTHORIZED" });
   });
 });
 
 describe("getSession", () => {
   it("returns the user, with role, for the cookie sign-in gave", async () => {
     const { user } = await signUp("me@test.dev");
-    const res = await post("/sign-in/email", { email: "me@test.dev", password: PASSWORD });
-    const cookie = res.headers.get("set-cookie")!.split(";")[0];
+    const cookie = (await signIn("me@test.dev")).get("set-cookie")!.split(";")[0];
 
     const session = await auth.api.getSession({ headers: new Headers({ cookie }) });
     expect(session?.user).toMatchObject({ id: user.id, email: "me@test.dev", role: "patient" });

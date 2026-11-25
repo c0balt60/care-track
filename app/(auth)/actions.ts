@@ -12,7 +12,11 @@ import { auth } from "@/lib/better-auth";
 import { db } from "@/lib/db";
 import { patients, users } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
+import { clientIp, LIMITS, rateLimit, tooManyAttempts } from "@/lib/rate-limit";
 import { safeNext } from "@/lib/safe-next";
+import { dob as dobField } from "@/lib/patient-details";
+import { parse, phone, requiredText } from "@/lib/validation";
+import { z } from "zod";
 
 export type FormState = { error?: string };
 
@@ -31,43 +35,56 @@ function logError(err: unknown, msg: string) {
 // admins are only ever made by another admin (ADM-1 #32) or the seed script.
 const SIGNUP_ROLES = { patient: "patient", practitioner: "practitioner", clinic: "staff" } as const;
 
+// These forms show the error as text, so each schema's error is the message itself.
+const signUpForm = z.object({
+  as: z.enum(Object.keys(SIGNUP_ROLES) as (keyof typeof SIGNUP_ROLES)[], { error: "Choose what describes you first." }),
+  name: requiredText(200, "Enter your full name."),
+  email: requiredText(254, "Enter your email.").pipe(z.email({ error: "Enter a valid email." })),
+  password: z
+    .string({ error: "Use a password of at least 8 characters." })
+    .min(8)
+    .max(128, { error: "Use a password of at most 128 characters." }), // Better Auth's limit
+});
+
+// Patients book with the date of birth and phone from their account (see the outline).
+// The same rules as the /settings form, so a value accepted here can be saved there.
+const patientSignUpFields = (today: string) =>
+  z.object({ dob: dobField(today, "Enter a valid date of birth."), phone: phone("Enter a valid phone number.") });
+
+const logInForm = z.object({
+  email: requiredText(254, "Enter your email and password."),
+  password: z.string({ error: "Enter your email and password." }).min(1).max(128, { error: "Email or password is incorrect." }),
+});
+
 export async function signUp(_prev: FormState, form: FormData): Promise<FormState> {
-  const as = text(form, "as");
-  if (!Object.hasOwn(SIGNUP_ROLES, as)) return { error: "Choose what describes you first." };
-  const role = SIGNUP_ROLES[as as keyof typeof SIGNUP_ROLES];
+  const fields = parse(signUpForm, form);
+  if (!fields.ok) return { error: fields.error };
+  const { name, email, password } = fields.data;
+  const role = SIGNUP_ROLES[fields.data.as];
 
-  const name = text(form, "name");
-  const email = text(form, "email");
-  const password = form.get("password");
-  if (!name || name.length > 200) return { error: "Enter your full name." };
-  if (!email) return { error: "Enter your email." };
-  if (typeof password !== "string" || password.length < 8) return { error: "Use a password of at least 8 characters." };
-
-  // Patients book with the date of birth and phone from their account (see the outline).
-  const dob = text(form, "dob");
-  const phone = text(form, "phone");
+  let dob = "";
+  let phone = "";
   if (role === "patient") {
-    // JS rolls impossible dates forward ("2026-02-29" → March 1), so check that the
-    // parsed date converts back to exactly what was typed.
-    const born = new Date(dob);
-    const real = /^\d{4}-\d{2}-\d{2}$/.test(dob) && !Number.isNaN(born.getTime()) && born.toISOString().slice(0, 10) === dob;
-    if (!real || born > new Date()) {
-      return { error: "Enter a valid date of birth." };
-    }
-    if (!phone || phone.length > 40) return { error: "Enter your phone number." };
+    const extra = parse(patientSignUpFields(new Date().toISOString().slice(0, 10)), form);
+    if (!extra.ok) return { error: extra.error };
+    ({ dob, phone } = extra.data);
   }
+
+  // After validation, so typos don't use up attempts; before the account is made.
+  const h = await headers();
+  const wait = await rateLimit(`signup:ip:${clientIp(h)}`, LIMITS.signupPerIp);
+  if (wait) return { error: tooManyAttempts(wait) };
 
   let userId: string;
   try {
     // Creates the user (role defaults to "patient"), the credential account with the
     // scrypt hash, and a session, then sets the httpOnly session cookie.
-    const res = await auth.api.signUpEmail({ body: { name, email, password }, headers: await headers() });
+    const res = await auth.api.signUpEmail({ body: { name, email, password }, headers: h });
     userId = res.user.id;
   } catch (err) {
     if (isAPIError(err)) {
       if (err.body?.code === "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL") return { error: "An account with that email already exists. Try logging in." };
       if (err.body?.code === "INVALID_EMAIL") return { error: "Enter a valid email." };
-      if (err.body?.code === "PASSWORD_TOO_LONG") return { error: "Use a password of at most 128 characters." };
     }
     logError(err, "Sign-up failed");
     return { error: "Something went wrong. Please try again." };
@@ -98,12 +115,19 @@ export async function signUp(_prev: FormState, form: FormData): Promise<FormStat
 }
 
 export async function logIn(_prev: FormState, form: FormData): Promise<FormState> {
-  const email = text(form, "email");
-  const password = form.get("password");
-  if (!email || typeof password !== "string" || !password) return { error: "Enter your email and password." };
+  const fields = parse(logInForm, form);
+  if (!fields.ok) return { error: fields.error };
+  const { email, password } = fields.data;
+
+  // Per IP stops one attacker trying many accounts; per email stops many IPs trying one account.
+  const h = await headers();
+  const wait =
+    (await rateLimit(`login:ip:${clientIp(h)}`, LIMITS.loginPerIp)) ||
+    (await rateLimit(`login:email:${email.toLowerCase()}`, LIMITS.loginPerEmail));
+  if (wait) return { error: tooManyAttempts(wait) };
 
   try {
-    await auth.api.signInEmail({ body: { email, password }, headers: await headers() });
+    await auth.api.signInEmail({ body: { email, password }, headers: h });
   } catch (err) {
     // One message for wrong email and wrong password, so the form doesn't reveal who has an account.
     if (isAPIError(err) && (err.status === "UNAUTHORIZED" || err.status === "BAD_REQUEST")) {

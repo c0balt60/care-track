@@ -26,7 +26,7 @@ const updatedAt = () =>
     .defaultNow()
     .$onUpdate(() => new Date());
 
-//Keep these in sync with the types in lib/mock-data.ts
+// The allowed values for text columns. Check constraints below enforce them in the database too.
 export const ROLES = ["patient", "practitioner", "staff"] as const;
 export const USER_ROLES = [...ROLES, "admin"] as const;
 export const APPOINTMENT_STATUSES = ["pending", "confirmed", "declined", "cancelled", "completed"] as const;
@@ -389,3 +389,13 @@ export const auditLog = pgTable(
     index("audit_log_actor_idx").on(t.actorId, t.at),
   ],
 );
+
+/**
+ * Fixed-window counters for lib/rate-limit.ts (HRD-2 #36). One row per key, such as
+ * "login:ip:203.0.113.7". Lives in Postgres so every server instance shares the counts.
+ */
+export const rateLimits = pgTable("rate_limits", {
+  key: text("key").primaryKey(),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+  count: integer("count").notNull(),
+});
