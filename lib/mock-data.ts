@@ -15,6 +15,8 @@ export type Clinic = {
   phone: string;
   services: string[];
   timeZone: string;
+  lat: number;
+  lng: number;
 };
 
 export type Practitioner = {
@@ -29,6 +31,9 @@ export type Practitioner = {
   bookingMode: "instant" | "approval";
   timeZone: string;
   slotMinutes: number;
+  /** Solo practices only; practitioners at a clinic use the clinic's. See `practitionerLocation`. */
+  lat?: number;
+  lng?: number;
   /** Weekly hours, 0 = Sunday */
   hours: Partial<Record<number, Hours>>;
   /** `day` is days from today. Empty `hours` means closed. */
@@ -84,6 +89,8 @@ export const clinics: Clinic[] = [
     name: "Northside Clinic",
     address: "212 River St",
     city: "Troy, NY",
+    lat: 42.7335,
+    lng: -73.688,
     phone: "(518) 555-0142",
     services: ["Dermatology", "Family medicine", "Physical therapy"],
     timeZone: TZ,
@@ -150,6 +157,8 @@ export const practitioners: Practitioner[] = [
     bio: "Orthopedic surgeon in solo practice. Reviews each request to make sure a visit is the right next step.",
     clinicId: null,
     city: "Albany, NY",
+    lat: 42.6526,
+    lng: -73.7562,
     bookingMode: "approval",
     timeZone: TZ,
     slotMinutes: 30,
@@ -165,6 +174,8 @@ export const practitioners: Practitioner[] = [
     bio: "Pediatrician for newborns through age 18. Saturday mornings available.",
     clinicId: null,
     city: "Cohoes, NY",
+    lat: 42.7743,
+    lng: -73.7001,
     bookingMode: "instant",
     timeZone: TZ,
     slotMinutes: 30,
@@ -237,6 +248,12 @@ export function appointments(): Appointment[] {
 export const today = (timeZone = TZ): DayKey => dayKey(new Date(), timeZone);
 export const getPractitioner = (id: string) => practitioners.find((p) => p.id === id);
 export const getClinic = (id: string | null) => clinics.find((c) => c.id === id);
+/** A practitioner is where their clinic is, falling back to their own coordinates (solo practice). */
+export function practitionerLocation(p: Practitioner): { lat: number; lng: number } | null {
+  const c = getClinic(p.clinicId);
+  if (c) return { lat: c.lat, lng: c.lng };
+  return p.lat != null && p.lng != null ? { lat: p.lat, lng: p.lng } : null;
+}
 /** Falls back to a placeholder for patients the front desk just created in the prototype. */
 export const getPatient = (id: string): Patient =>
   patients.find((p) => p.id === id) ?? { id, name: "New patient", dob: "", phone: "", hasAccount: false };
