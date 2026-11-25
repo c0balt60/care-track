@@ -39,7 +39,12 @@ export const auth = betterAuth({
   //
   // Sign-in is blocked over HTTP for the same reason: the logIn action rate-limits it
   // (HRD-2 #36), and an open /api/auth/sign-in/email would let scripts skip that limit.
-  disabledPaths: ["/sign-up/email", "/sign-in/email"],
+  //
+  // The rest are account endpoints the app doesn't use (CMP-1 #39). Left open, update-user let a
+  // signed-in user set any name or image (skipping our validation and the audit log), and
+  // verify-password / change-password allowed password guessing outside the login rate limit.
+  // When settings gets "change password", build it as a rate-limited server action.
+  disabledPaths: ["/sign-up/email", "/sign-in/email", "/update-user", "/verify-password", "/change-password"],
 
   emailAndPassword: {
     enabled: true,

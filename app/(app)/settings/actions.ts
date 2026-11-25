@@ -3,7 +3,7 @@
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { audit, redactedDiff } from "@/lib/audit";
+import { audit, diffOf, redactedDiff } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { getViewerAs } from "@/lib/auth";
 import { patients, practitioners, users } from "@/lib/db/schema";
@@ -46,12 +46,18 @@ export async function updatePatientDetails(formData: FormData) {
 export async function updatePractitionerProfile(formData: FormData) {
   // Identify the practitioner on the server. Never trust an id sent in the form.
   const practitioner = await getCurrentPractitioner();
-  if (!practitioner) redirect("/settings?error=no-practitioner");
+  const viewer = await getViewerAs("practitioner");
+  if (!practitioner || !viewer) redirect("/settings?error=no-practitioner");
 
   const parsed = parsePractitionerProfile(formData);
   if (!parsed.ok) redirect(`/settings?error=${parsed.error}`);
 
-  await db.update(practitioners).set(parsed.data).where(eq(practitioners.id, practitioner.id));
+  // The change and its audit row commit together (CMP-1 #39: this wasn't audited before).
+  // A public profile isn't PHI, so the diff keeps the values.
+  await db.transaction(async (tx) => {
+    await tx.update(practitioners).set(parsed.data).where(eq(practitioners.id, practitioner.id));
+    await audit(viewer.userId, "practitioner.update", "practitioners", practitioner.id, diffOf(practitioner, parsed.data), tx);
+  });
 
   revalidatePath("/settings");
   revalidatePath("/practitioners/[id]", "page");

@@ -42,12 +42,12 @@ async function signIn(email: string, password = PASSWORD) {
   return headers;
 }
 
-/** A request through the HTTP handler, the way the browser reaches /api/auth/*. */
-function post(path: string, body: unknown) {
+/** A request through the HTTP handler, the way the browser reaches /api/auth/*. Pass `cookie` to send it signed in. */
+function post(path: string, body: unknown, cookie?: string) {
   return auth.handler(
     new Request(`${BASE_URL}/api/auth${path}`, {
       method: "POST",
-      headers: { "content-type": "application/json", origin: BASE_URL },
+      headers: { "content-type": "application/json", origin: BASE_URL, ...(cookie && { cookie }) },
       body: JSON.stringify(body),
     }),
   );
@@ -106,6 +106,35 @@ describe("HTTP routes", () => {
     await signUp("http@test.dev");
     const res = await post("/sign-in/email", { email: "http@test.dev", password: PASSWORD });
     expect(res.status).toBe(404);
+  });
+
+  // CMP-1 #39: these were open to any signed-in user. update-user took a 5,000-character
+  // name and a javascript: image URL, skipping the app's validation and the audit log;
+  // verify-password and change-password allowed password guessing outside the login rate limit.
+  it("blocks the account endpoints the app doesn't use, even when signed in", async () => {
+    await signUp("http@test.dev");
+    const cookie = ((await signIn("http@test.dev")).get("set-cookie") ?? "").split(";")[0];
+
+    for (const [path, body] of [
+      ["/update-user", { name: "x".repeat(5000), image: "javascript:alert(1)" }],
+      ["/verify-password", { password: "guess-1234" }],
+      ["/change-password", { currentPassword: "guess-1234", newPassword: "new-password-1" }],
+    ] as const) {
+      expect((await post(path, body, cookie)).status, path).toBe(404);
+    }
+    const [row] = await db.select().from(schema.users);
+    expect(row).toMatchObject({ name: "Test", image: null });
+  });
+
+  it("still won't let anyone set their role, or delete or re-email an account", async () => {
+    await signUp("http@test.dev");
+    const cookie = ((await signIn("http@test.dev")).get("set-cookie") ?? "").split(";")[0];
+
+    expect((await post("/update-user", { role: "admin" }, cookie)).status).not.toBe(200);
+    expect((await post("/delete-user", {}, cookie)).status).not.toBe(200);
+    expect((await post("/change-email", { newEmail: "other@test.dev" }, cookie)).status).not.toBe(200);
+    const [row] = await db.select().from(schema.users);
+    expect(row).toMatchObject({ role: "patient", email: "http@test.dev" });
   });
 });
 

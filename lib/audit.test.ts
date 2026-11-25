@@ -3,7 +3,7 @@
 import { eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { audit, redactedDiff } from "./audit";
+import { audit, diffOf, redactedDiff } from "./audit";
 import { db } from "./db";
 import * as schema from "./db/schema";
 
@@ -83,6 +83,20 @@ describe("audit_log is append-only", () => {
 
     const [row] = await rowsFor(user.id);
     expect(row.actorId).toBe(user.id);
+  });
+});
+
+describe("diffOf", () => {
+  it("keeps the values of the fields that changed, comparing arrays by content", () => {
+    const before = { name: "Northside", services: ["Acne", "Flu shot"], phone: "555-0100" };
+    expect(diffOf(before, { name: "Northside Clinic", services: ["Acne", "Flu shot"], phone: "555-0100" })).toEqual({
+      name: { from: "Northside", to: "Northside Clinic" },
+    });
+    expect(diffOf(before, { services: ["Acne"] })).toEqual({ services: { from: ["Acne", "Flu shot"], to: ["Acne"] } });
+  });
+
+  it("is null when nothing changed", () => {
+    expect(diffOf({ services: ["Acne"] }, { services: ["Acne"] })).toBeNull();
   });
 });
 
