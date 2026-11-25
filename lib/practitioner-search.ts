@@ -86,7 +86,7 @@ export async function searchPractitioners({
         lat: practitioners.lat,
         lng: practitioners.lng,
       },
-      clinic: { name: clinics.name, city: clinics.city, lat: clinics.lat, lng: clinics.lng },
+      clinic: { name: clinics.name, address: clinics.address, city: clinics.city, lat: clinics.lat, lng: clinics.lng },
     })
     .from(practitioners)
     .leftJoin(clinics, eq(clinics.id, practitioners.clinicId))
@@ -108,8 +108,10 @@ export async function searchPractitioners({
       if (fromDay) slots = slots.filter((s) => dayKey(s.start, practitioner.timeZone) >= fromDay);
       // Practitioners at a clinic are seen at the clinic, so the clinic's point wins.
       const at = clinic ? clinic : { lat, lng };
-      const km = near && at.lat != null && at.lng != null ? haversineKm(near, { lat: at.lat, lng: at.lng }) : null;
-      return { practitioner, clinic: clinic && { name: clinic.name, city: clinic.city }, slots, km };
+      // Where they're seen, for the results map and directions (MAP-4 #54). Null if not geocoded.
+      const point = at.lat != null && at.lng != null ? { lat: at.lat, lng: at.lng } : null;
+      const km = near && point ? haversineKm(near, point) : null;
+      return { practitioner, clinic: clinic && { name: clinic.name, address: clinic.address, city: clinic.city }, point, slots, km };
     })
     .filter((r) => (!near || !maxKm || (r.km != null && r.km <= maxKm)) && (!maxWaitDays || soonest(r.slots) <= waitLimit));
 

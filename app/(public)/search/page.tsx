@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { MapPinIcon, SearchIcon } from "@/components/icons";
 import { PractitionerCard } from "@/components/practitioner-card";
+import { ResultsMap } from "@/components/results-map";
 import { UseMyLocation } from "@/components/use-my-location";
 import { EmptyState, param } from "@/components/ui";
 import { addDays, dayKey } from "@/lib/dates";
@@ -24,12 +25,14 @@ export default async function Search({ searchParams }: PageProps<"/search">) {
   // AVG_KMH, so a time limit is just a tighter distance limit.
   const location = await resolveLocation(near, param(sp.lat), param(sp.lng));
   const limits = [maxKm, maxMin && (maxMin / 60) * AVG_KMH].filter((x): x is number => !!x);
+  const radiusKm = limits.length ? Math.min(...limits) : undefined;
   const [results, services] = await Promise.all([
     searchPractitioners({
-      service, from, near: location.point, maxKm: limits.length ? Math.min(...limits) : undefined, maxWaitDays: maxWait, sort,
+      service, from, near: location.point, maxKm: radiusKm, maxWaitDays: maxWait, sort,
     }),
     listServices(),
   ]);
+  const pins = results.flatMap((r) => (r.point ? [{ id: r.practitioner.id, name: r.practitioner.name, point: r.point }] : []));
   const needsPlace = !location.point && !location.error && (maxKm || maxMin || sort === "nearest");
   // "Use my location" leaves Near empty; keep its coordinates through the next form submit.
   const fromBrowser = !near && location.point;
@@ -111,6 +114,13 @@ export default async function Search({ searchParams }: PageProps<"/search">) {
           <p role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
             Enter a city or postal code, or use your location, to filter or sort by distance.
           </p>
+        )}
+
+        {/* MAP-4 (#54). Pins mirror the list below; skipped if nothing has coordinates. */}
+        {pins.length > 0 && (
+          <div className="mb-4">
+            <ResultsMap pins={pins} you={location.point} radiusKm={location.point ? radiusKm : undefined} />
+          </div>
         )}
 
         {results.length ? (

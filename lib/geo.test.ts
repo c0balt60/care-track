@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { haversineKm, travelMinutes } from "./geo";
+import { directionsUrl, haversineKm, travelMinutes } from "./geo";
 
 describe("haversineKm", () => {
   it("is 0 for the same point", () => {
@@ -19,5 +19,18 @@ describe("travelMinutes", () => {
     expect(travelMinutes(10)).toBe(20);
     expect(travelMinutes(0.1)).toBe(1);
     expect(travelMinutes(0)).toBe(0);
+  });
+});
+
+describe("directionsUrl", () => {
+  const base = "https://www.google.com/maps/dir/?api=1&destination=";
+  it("prefers the street address", () => {
+    expect(directionsUrl({ address: "1 Main St", city: "Leeds", point: { lat: 1, lng: 2 } })).toBe(`${base}1+Main+St%2C+Leeds`);
+  });
+  it("uses coordinates without an address", () => {
+    expect(directionsUrl({ city: "Leeds", point: { lat: 1.5, lng: 2 } })).toBe(`${base}1.5%2C2`);
+  });
+  it("falls back to the city", () => {
+    expect(directionsUrl({ city: "Leeds" })).toBe(`${base}Leeds`);
   });
 });

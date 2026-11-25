@@ -83,7 +83,7 @@ describe("searchPractitioners", () => {
   it("narrows to one clinic, with the clinic's name and city", async () => {
     const rows = await searchPractitioners({ clinicId: riverside, now: NOW });
     expect(names(rows)).toEqual(["Dr. Adams", "Dr. Carter"]);
-    expect(rows[0].clinic).toEqual({ name: "Riverside Clinic", city: "Troy, NY" });
+    expect(rows[0].clinic).toMatchObject({ name: "Riverside Clinic", city: "Troy, NY" });
     const solo = await searchPractitioners({ service: "pediatrics", now: NOW });
     expect(solo[0].clinic).toBeNull();
   });

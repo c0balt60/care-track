@@ -15,3 +15,9 @@ export const AVG_KMH = 30;
 
 /** Estimated minutes to drive `km`, rounded up to a whole minute. Always shown as an estimate. */
 export const travelMinutes = (km: number) => Math.ceil((km / AVG_KMH) * 60);
+
+/** Google Maps directions link (no API key). A street address routes to the entrance best; solo practitioners fall back to coordinates. */
+export function directionsUrl(to: { address?: string | null; city: string; point?: Point | null }): string {
+  const destination = to.address ? `${to.address}, ${to.city}` : to.point ? `${to.point.lat},${to.point.lng}` : to.city;
+  return `https://www.google.com/maps/dir/?${new URLSearchParams({ api: "1", destination })}`;
+}
