@@ -96,11 +96,19 @@ own `BETTER_AUTH_SECRET` too. All previews share that one branch.
 `VERCEL_BRANCH_URL` and `VERCEL_URL` that Vercel sets on each preview, and trusts only
 those two hosts.
 
-Migrate the preview branch like production, with its own direct URL. To get test
-accounts there, seed it (only the preview branch, never production):
+Each preview build migrates the preview branch automatically (`buildCommand` in
+`vercel.json`), so a PR's migration lands there before the PR merges. Because all
+previews share the branch:
+
+- An abandoned PR's migration stays in the preview DB. Reset the branch from `main`
+  in Neon (Branches → `preview` → Reset from parent), then redeploy a preview.
+- Two PRs with conflicting migrations will break each other's previews. Reset the same way.
+- Two previews building at the same moment can both try to migrate. If one build
+  fails on a migration error, redeploy it.
+
+To get test accounts there, seed it (only the preview branch, never production):
 
 ```bash
-DATABASE_URL_UNPOOLED="<preview direct url>" pnpm db:migrate
 DATABASE_URL_UNPOOLED="<preview direct url>" pnpm db:seed
 ```
 
@@ -116,7 +124,7 @@ You only need GitHub secrets if a workflow starts using them, for example:
 
 | Secret | Needed when |
 |--------|-------------|
-| `DATABASE_URL_UNPOOLED` | A workflow runs `pnpm db:migrate` against Neon on merge to `main`. |
+| `DATABASE_URL_UNPOOLED` | A workflow runs `pnpm db:migrate` against Neon. Not needed today: Vercel's build runs migrations. |
 | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | You deploy from GitHub Actions instead of Vercel's Git integration. |
 
 The app's runtime secrets (`BETTER_AUTH_SECRET`, and later `RESEND_API_KEY`,
