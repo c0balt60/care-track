@@ -4,6 +4,7 @@
 // chose are tested, not Better Auth itself.
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import * as schema from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 const BASE_URL = "http://localhost:3000";
 // Better Auth reads these when lib/better-auth.ts is imported (below), so set them first.
@@ -129,5 +130,38 @@ describe("getSession", () => {
 
   it("returns null without a cookie", async () => {
     expect(await auth.api.getSession({ headers: new Headers() })).toBeNull();
+  });
+});
+
+describe("disabled accounts", () => {
+  const sessionsOf = (userId: string) => db.select().from(schema.sessions).where(eq(schema.sessions.userId, userId));
+
+  it("can't sign in, and no session is created", async () => {
+    const { user } = await signUp("off@test.dev");
+    await db.update(schema.users).set({ disabledAt: new Date() }).where(eq(schema.users.id, user.id));
+    await db.delete(schema.sessions).where(eq(schema.sessions.userId, user.id)); // sign-up made one
+
+    await expect(
+      auth.api.signInEmail({ body: { email: "off@test.dev", password: PASSWORD } }),
+    ).rejects.toMatchObject({ body: { code: "ACCOUNT_DISABLED" } });
+    expect(await sessionsOf(user.id)).toHaveLength(0);
+  });
+
+  it("gives a wrong password the normal error, not the disabled one", async () => {
+    const { user } = await signUp("off2@test.dev");
+    await db.update(schema.users).set({ disabledAt: new Date() }).where(eq(schema.users.id, user.id));
+
+    await expect(
+      auth.api.signInEmail({ body: { email: "off2@test.dev", password: "wrong-password" } }),
+    ).rejects.not.toMatchObject({ body: { code: "ACCOUNT_DISABLED" } });
+  });
+
+  it("signs in again once the account is enabled", async () => {
+    const { user } = await signUp("back@test.dev");
+    await db.update(schema.users).set({ disabledAt: new Date() }).where(eq(schema.users.id, user.id));
+    await db.update(schema.users).set({ disabledAt: null }).where(eq(schema.users.id, user.id));
+
+    const res = await auth.api.signInEmail({ body: { email: "back@test.dev", password: PASSWORD } });
+    expect(res.user.id).toBe(user.id);
   });
 });

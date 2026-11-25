@@ -51,6 +51,8 @@ export const users = pgTable(
     // Better Auth fields. Property names must stay camelCase: Better Auth looks them up by key.
     emailVerified: boolean("email_verified").notNull().default(false),
     image: text("image"),
+        /** Set when an admin disables the account (ADM-1 #32). Null means active. */
+    disabledAt: timestamp("disabled_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
