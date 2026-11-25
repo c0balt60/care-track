@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { dayKey, formatDay, formatTime, formatWhen } from "@/lib/dates";
+import { directionsUrl, travelMinutes } from "@/lib/geo";
 import type { SearchResult } from "@/lib/practitioner-search";
 import { MapPinIcon } from "./icons";
 import { Avatar } from "./ui";
@@ -10,7 +11,7 @@ import { Avatar } from "./ui";
  * any ?from= day filter), so this component does no data loading of its own.
  */
 export function PractitionerCard({ result }: { result: SearchResult }) {
-  const { practitioner: p, clinic, slots } = result;
+  const { practitioner: p, clinic, slots, km, point } = result;
   const tz = p.timeZone;
   const first = slots[0];
   const firstDay = first ? dayKey(first.start, tz) : null;
@@ -23,7 +24,12 @@ export function PractitionerCard({ result }: { result: SearchResult }) {
     : `/practitioners/${p.id}`;
 
   return (
-    <article className="card p-4 sm:p-5">
+    <article
+      id={`result-${p.id}`}
+      data-result-id={p.id}
+      tabIndex={-1}
+      className="card scroll-mt-24 p-4 transition-shadow data-[active]:ring-2 data-[active]:ring-accent sm:p-5"
+    >
       <div className="flex gap-4">
         <Avatar name={p.name} />
         <div className="min-w-0">
@@ -37,6 +43,21 @@ export function PractitionerCard({ result }: { result: SearchResult }) {
             <MapPinIcon width={16} height={16} />
             {clinic ? `${clinic.name} · ${clinic.city}` : p.city}
           </p>
+          <p>
+            <a
+              href={directionsUrl({ address: clinic?.address, city: clinic?.city ?? p.city, point: point })}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="link text-sm"
+            >
+              Get directions<span className="sr-only"> (opens Google Maps)</span>
+            </a>
+          </p>
+          {km != null && (
+            <p className="text-sm text-muted">
+              {km < 10 ? km.toFixed(1) : Math.round(km)} km away · about {travelMinutes(km)} min drive (estimate)
+            </p>
+          )}
         </div>
       </div>
 

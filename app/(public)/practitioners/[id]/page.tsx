@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { InfoIcon, MapPinIcon } from "@/components/icons";
 import { SlotPicker } from "@/components/slot-picker";
 import { Avatar, param } from "@/components/ui";
+import { directionsUrl } from "@/lib/geo";
 import { formatWhen } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { clinics, practitioners } from "@/lib/db/schema";
@@ -23,7 +24,7 @@ export default async function PractitionerProfile({ params, searchParams }: Page
     .select({
       practitioner: practitioners,
       // Left join: solo practitioners have no clinic, so every clinic column is null.
-      clinic: { id: clinics.id, name: clinics.name, address: clinics.address, city: clinics.city, phone: clinics.phone },
+      clinic: { id: clinics.id, name: clinics.name, address: clinics.address, city: clinics.city, lat: clinics.lat, lng: clinics.lng, phone: clinics.phone },
     })
     .from(practitioners)
     .leftJoin(clinics, eq(clinics.id, practitioners.clinicId))
@@ -31,6 +32,9 @@ export default async function PractitionerProfile({ params, searchParams }: Page
     .limit(1);
   if (!row) notFound();
   const { practitioner: p, clinic } = row;
+  const lat = clinic ? clinic.lat : p.lat;
+  const lng = clinic ? clinic.lng : p.lng;
+  const point = lat != null && lng != null ? { lat, lng } : null;
   const slots = (await openSlotsFor([p])).get(p.id) ?? [];
 
   // The appointment being moved, if the signed-in patient owns it and may move it.
@@ -99,6 +103,14 @@ export default async function PractitionerProfile({ params, searchParams }: Page
             <p className="mt-1 text-muted">
               {clinic ? <>{clinic.name}<br />{clinic.address}, {clinic.city}<br />{clinic.phone}</> : p.city}
             </p>
+            <a
+              href={directionsUrl({ address: clinic?.address, city: clinic?.city ?? p.city, point: point })}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="link text-sm"
+            >
+              Get directions<span className="sr-only"> (opens Google Maps)</span>
+            </a>
           </div>
           <div>
             <h3 className="font-semibold">About</h3>

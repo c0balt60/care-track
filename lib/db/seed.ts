@@ -109,7 +109,7 @@ async function main() {
     for (const c of seed.clinics) {
       const [row] = await tx
         .insert(schema.clinics)
-        .values({ name: c.name, address: c.address, city: c.city, phone: c.phone, services: c.services, timeZone: c.timeZone })
+        .values({ name: c.name, address: c.address, city: c.city, phone: c.phone, services: c.services, timeZone: c.timeZone, lat: c.lat, lng: c.lng })
         .returning({ id: schema.clinics.id });
       clinicId.set(c.slug, row.id);
     }
@@ -132,6 +132,8 @@ async function main() {
           bookingMode: p.bookingMode,
           timeZone: p.timeZone,
           slotMinutes: p.slotMinutes,
+          lat: p.lat ?? null,
+          lng: p.lng ?? null,
           verifiedAt: new Date(), // unverified practitioners are hidden from search (ADM-2)
         })
         .returning({ id: schema.practitioners.id });

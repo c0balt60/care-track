@@ -161,12 +161,12 @@ Wireframes show the layout, not final copy. All names are fictional.
 
 ```
 ┌────────────────────────────────┐
-│ [Dermatology    ] [Troy, NY  ] │
+│ [Dermatology    ] [Toronto, ON  ] │
 │ From [Today    ▾]   12 results │
 ├────────────────────────────────┤
 │ (SR) Dr. Sam Rivera            │
 │      Dermatology               │
-│      Northside Clinic · Troy   │
+│      Northside Clinic · Toronto   │
 │      Next open: Tue, Oct 8     │
 │      [9:30] [10:30] [2:15]  →  │
 ├────────────────────────────────┤
@@ -175,10 +175,10 @@ Wireframes show the layout, not final copy. All names are fictional.
 └────────────────────────────────┘
 ```
 
-- Filters live in the URL (`?service=&near=&from=`), so results can be shared and the back button works. It's a plain `<form method="get">`.
+- Filters live in the URL (`?service=&near=&from=`, or `&lat=&lng=` after **Use my location**), so results can be shared and the back button works. It's a plain `<form method="get">`.
 - Each card shows up to 3 time chips for the next open day, plus **More times →** linking to the profile.
-- Empty state: "No openings for Dermatology near Troy in the next 30 days", with suggestions to widen the location or clear the date.
-- Desktop: filters in a left column, results on the right. No map in v1.
+- Empty state: "No openings for Dermatology near Toronto in the next 30 days", with suggestions to widen the location or clear the date.
+- Desktop: filters in a left column, results on the right, with a map beside the results (see [Maps and directions](#maps-and-directions)).
 
 ### `/practitioners/[id]` Profile and slot picker
 
@@ -186,7 +186,7 @@ Wireframes show the layout, not final copy. All names are fictional.
 ┌────────────────────────────────┐
 │ (SR) Dr. Sam Rivera, MD        │
 │      Dermatology               │
-│      Northside Clinic · Troy → │
+│      Northside Clinic · Toronto → │
 ├─ Book an appointment ──────────┤
 │ Confirmed instantly            │
 │ ◀  Oct 7 – Oct 13           ▶  │
@@ -208,6 +208,14 @@ Wireframes show the layout, not final copy. All names are fictional.
 
 The clinic's name, address, phone, and services, followed by its practitioners as the same cards used in search results. `/clinic/book` reuses this list inside the app shell.
 
+### Maps and directions
+
+The app shows *where* care is; Google Maps or Apple Maps handles *getting there*.
+
+- **Showing:** a Leaflet map with OpenStreetMap tiles (no API key) pins each clinic, or each solo practitioner, at its stored `lat`/`lng` (MAP-1, MAP-4). Clinic addresses are public, so these pins are exact.
+- **Patient location is approximate:** a city or postal code (Canada only for now) resolves to its center via OpenStreetMap Nominatim, and "Use my location" is rounded to about 1 km before it goes in the URL. It's used for distance only and never stored (MAP-2).
+- **Navigating:** each result card and profile has a **Get directions** link that opens Google Maps with the address filled in, e.g. `https://www.google.com/maps/dir/?api=1&destination=220+King+St+W,+Toronto,+ON`. Using the address instead of coordinates routes people to the entrance. No Google API, key or billing is involved, and nothing is sent to Google until the patient clicks.
+
 ### `/login`, `/signup`
 
 - Both use a centered card on a plain background. Login links to Sign up and the other way round, and both carry `next` along.
@@ -225,7 +233,7 @@ The clinic's name, address, phone, and services, followed by its practitioners a
 │ ┌────────────────────────────┐ │
 │ │ Tue, Oct 8 · 10:30 AM EDT  │ │
 │ │ 30 min · Dr. Sam Rivera    │ │
-│ │ Northside Clinic, Troy, NY │ │
+│ │ Northside Clinic, Toronto, ON │ │
 │ └────────────────────────────┘ │
 │ ┌ Staff only ────────────────┐ │
 │ │ Patient                    │ │
@@ -250,7 +258,7 @@ When rescheduling, the summary box shows the old time crossed out above the new 
 │ ┌ Next appointment ──────────┐ │
 │ │ Tue, Oct 8 · 10:30 AM      │ │
 │ │ Dr. Sam Rivera · Derm.     │ │
-│ │ Northside Clinic, Troy     │ │
+│ │ Northside Clinic, Toronto     │ │
 │ │ [Confirmed]                │ │
 │ │ [Reschedule]   [Cancel]    │ │
 │ └────────────────────────────┘ │
@@ -477,7 +485,7 @@ The screens can be built against **typed mock data** before the API exists, so f
 
 ## Not in v1
 
-Maps and distance sorting · email/SMS reminders · insurance and payments · messaging · intake forms and medical records · video visits · practitioners at several locations · site admin and practitioner verification · dark mode · translations · a waitlist ("tell me if an earlier time opens"), which would be a strong later feature given the app's pitch.
+Turn-by-turn directions or real drive times (we link out to Google Maps instead) · email/SMS reminders · insurance and payments · messaging · intake forms and medical records · video visits · practitioners at several locations · site admin and practitioner verification · dark mode · translations · a waitlist ("tell me if an earlier time opens"), which would be a strong later feature given the app's pitch.
 
 ## Open questions
 

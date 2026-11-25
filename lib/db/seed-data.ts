@@ -11,7 +11,7 @@ type Status = (typeof APPOINTMENT_STATUSES)[number];
 type Role = (typeof ROLES)[number];
 type Hours = [from: string, to: string][];
 
-export type SeedClinic = { slug: string; name: string; address: string; city: string; phone: string; services: string[]; timeZone: string };
+export type SeedClinic = { slug: string; name: string; address: string; city: string; phone: string; services: string[]; timeZone: string; lat: number; lng: number };
 
 export type SeedPractitioner = {
   slug: string;
@@ -25,6 +25,9 @@ export type SeedPractitioner = {
   bookingMode: "instant" | "approval";
   timeZone: string;
   slotMinutes: number;
+  /** Solo practices only; practitioners at a clinic use the clinic's (see schema). */
+  lat?: number;
+  lng?: number;
   /** Weekly hours, 0 = Sunday */
   hours: Partial<Record<number, Hours>>;
   /** `day` is days from today. Empty `hours` means closed. */
@@ -52,15 +55,17 @@ export const PATIENT_SLUG = "jordan";
 export const PRACTITIONER_SLUG = "rivera";
 export const STAFF_CLINIC_SLUG = "northside";
 
-const TZ = "America/New_York";
+const TZ = "America/Toronto";
 
 export const clinics: SeedClinic[] = [
   {
     slug: "northside",
     name: "Northside Clinic",
-    address: "212 River St",
-    city: "Troy, NY",
-    phone: "(518) 555-0142",
+    address: "220 King St W",
+    city: "Toronto, ON",
+    lat: 43.6532,
+    lng: -79.3832,
+    phone: "(416) 555-0142",
     services: ["Dermatology", "Family medicine", "Physical therapy"],
     timeZone: TZ,
   },
@@ -77,7 +82,7 @@ export const practitioners: SeedPractitioner[] = [
     services: ["Skin checks", "Acne", "Rashes and eczema", "Mole removal"],
     bio: "Board-certified dermatologist with 12 years of practice. Sees adults and teens for everyday skin concerns and yearly skin checks.",
     clinic: "northside",
-    city: "Troy, NY",
+    city: "Toronto, ON",
     bookingMode: "approval",
     timeZone: TZ,
     slotMinutes: 30,
@@ -95,7 +100,7 @@ export const practitioners: SeedPractitioner[] = [
     services: ["Annual physicals", "Sick visits", "Vaccines", "Chronic care"],
     bio: "Family doctor for all ages. Same-week sick visits are usually available.",
     clinic: "northside",
-    city: "Troy, NY",
+    city: "Toronto, ON",
     bookingMode: "instant",
     timeZone: TZ,
     slotMinutes: 20,
@@ -110,7 +115,7 @@ export const practitioners: SeedPractitioner[] = [
     services: ["Back and neck pain", "Sports injuries", "Post-surgery rehab"],
     bio: "Physical therapist focused on getting runners and weekend athletes back to what they love.",
     clinic: "northside",
-    city: "Troy, NY",
+    city: "Toronto, ON",
     bookingMode: "instant",
     timeZone: TZ,
     slotMinutes: 45,
@@ -125,7 +130,9 @@ export const practitioners: SeedPractitioner[] = [
     services: ["Knee and hip pain", "Fractures", "Joint injections"],
     bio: "Orthopedic surgeon in solo practice. Reviews each request to make sure a visit is the right next step.",
     clinic: null,
-    city: "Albany, NY",
+    city: "North York, ON",
+    lat: 43.7615,
+    lng: -79.4111,
     bookingMode: "approval",
     timeZone: TZ,
     slotMinutes: 30,
@@ -140,7 +147,9 @@ export const practitioners: SeedPractitioner[] = [
     services: ["Well-child visits", "Sick visits", "Vaccines"],
     bio: "Pediatrician for newborns through age 18. Saturday mornings available.",
     clinic: null,
-    city: "Cohoes, NY",
+    city: "Mississauga, ON",
+    lat: 43.5890,
+    lng: -79.6441,
     bookingMode: "instant",
     timeZone: TZ,
     slotMinutes: 30,
@@ -150,12 +159,12 @@ export const practitioners: SeedPractitioner[] = [
 ];
 
 export const patients: SeedPatient[] = [
-  { slug: "jordan", name: "Jordan Lee", dob: "1990-04-12", phone: "(518) 555-0110" },
-  { slug: "jamie", name: "Jamie Doe", dob: "1985-09-30", phone: "(518) 555-0123" },
-  { slug: "alex", name: "Alex Smith", dob: "1978-01-17", phone: "(518) 555-0187" },
-  { slug: "bo", name: "Bo Chen", dob: "2001-06-05", phone: "(518) 555-0164" },
-  { slug: "carmen", name: "Carmen Diaz", dob: "1995-11-21", phone: "(518) 555-0139" },
-  { slug: "riley", name: "Riley Brooks", dob: "1962-03-08", phone: "(518) 555-0171" },
+  { slug: "jordan", name: "Jordan Lee", dob: "1990-04-12", phone: "(416) 555-0110" },
+  { slug: "jamie", name: "Jamie Doe", dob: "1985-09-30", phone: "(416) 555-0123" },
+  { slug: "alex", name: "Alex Smith", dob: "1978-01-17", phone: "(416) 555-0187" },
+  { slug: "bo", name: "Bo Chen", dob: "2001-06-05", phone: "(416) 555-0164" },
+  { slug: "carmen", name: "Carmen Diaz", dob: "1995-11-21", phone: "(416) 555-0139" },
+  { slug: "riley", name: "Riley Brooks", dob: "1962-03-08", phone: "(416) 555-0171" },
 ];
 
 type Extra = Pick<SeedAppointment, "bookedBy" | "cancelledBy" | "cancelReason" | "declineNote">;

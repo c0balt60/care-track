@@ -1,6 +1,7 @@
 // @vitest-environment node
 // Runs the real migrations on an in-memory Postgres (PGlite), so it needs no Docker or DATABASE_URL.
 import { migrate } from "drizzle-orm/pglite/migrator";
+import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { db } from "./db";
 import * as schema from "./db/schema";
@@ -82,7 +83,7 @@ describe("searchPractitioners", () => {
   it("narrows to one clinic, with the clinic's name and city", async () => {
     const rows = await searchPractitioners({ clinicId: riverside, now: NOW });
     expect(names(rows)).toEqual(["Dr. Adams", "Dr. Carter"]);
-    expect(rows[0].clinic).toEqual({ name: "Riverside Clinic", city: "Troy, NY" });
+    expect(rows[0].clinic).toMatchObject({ name: "Riverside Clinic", city: "Troy, NY" });
     const solo = await searchPractitioners({ service: "pediatrics", now: NOW });
     expect(solo[0].clinic).toBeNull();
   });
@@ -109,6 +110,44 @@ describe("searchPractitioners", () => {
     // In the next 3 days (Mon–Wed) only Adams and Baker are open.
     const rows = await searchPractitioners({ days: 3, now: NOW });
     expect(rows.filter((r) => r.slots.length).map((r) => r.practitioner.name)).toEqual(["Dr. Adams", "Dr. Baker"]);
+  });
+});
+
+describe("searchPractitioners near a point (MAP-3)", () => {
+  const downtown = { lat: 43.65, lng: -79.38 };
+  const northYork = { lat: 43.76, lng: -79.41 }; // about 12.5 km north of downtown
+
+  beforeAll(async () => {
+    await db.update(schema.clinics).set(downtown).where(eq(schema.clinics.id, riverside));
+    await db.update(schema.practitioners).set(northYork).where(eq(schema.practitioners.name, "Dr. Baker"));
+    // Dr. Dunn has no location at all.
+  });
+
+  it("adds the distance from the clinic, or from a solo practitioner", async () => {
+    const rows = await searchPractitioners({ near: downtown, now: NOW });
+    const km = Object.fromEntries(rows.map((r) => [r.practitioner.name, r.km]));
+    expect(km["Dr. Adams"]).toBe(0);
+    expect(km["Dr. Baker"]).toBeCloseTo(12.6, 0);
+    expect(km["Dr. Dunn"]).toBeNull();
+    expect((await searchPractitioners({ now: NOW }))[0].km).toBeNull(); // no point, no distance
+  });
+
+  it("`maxKm` drops anyone further away or with no location", async () => {
+    expect(names(await searchPractitioners({ near: downtown, maxKm: 5, now: NOW }))).toEqual(["Dr. Adams", "Dr. Carter"]);
+    expect(names(await searchPractitioners({ near: downtown, maxKm: 25, now: NOW }))).toEqual(["Dr. Adams", "Dr. Baker", "Dr. Carter"]);
+    // Without a point there's nothing to measure from, so the limit is ignored.
+    expect(await searchPractitioners({ maxKm: 5, now: NOW })).toHaveLength(4);
+  });
+
+  it("sorts nearest first, ties by soonest-then-name, no location last", async () => {
+    const rows = await searchPractitioners({ near: northYork, sort: "nearest", now: NOW });
+    expect(names(rows)).toEqual(["Dr. Baker", "Dr. Adams", "Dr. Carter", "Dr. Dunn"]);
+  });
+
+  it("`maxWaitDays` keeps only practitioners with an opening that soon", async () => {
+    // Now is Monday 7:00. Adams opens today, Baker Wednesday, Carter Friday, Dunn never.
+    expect(names(await searchPractitioners({ maxWaitDays: 1, now: NOW }))).toEqual(["Dr. Adams"]);
+    expect(names(await searchPractitioners({ maxWaitDays: 3, now: NOW }))).toEqual(["Dr. Adams", "Dr. Baker"]);
   });
 });
 

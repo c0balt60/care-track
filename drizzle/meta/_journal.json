@@ -78,6 +78,13 @@
       "when": 1795641272291,
       "tag": "0010_rate_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795648370654,
+      "tag": "0011_coordinates",
+      "breakpoints": true
     }
   ]
 }

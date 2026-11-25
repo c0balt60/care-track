@@ -5,6 +5,7 @@ import {
     boolean,
     check,
     date, 
+    doublePrecision,
     index, 
     integer,
     jsonb,
@@ -133,6 +134,9 @@ export const clinics = pgTable("clinics", {
   phone: text("phone").notNull(),
   services: text("services").array().notNull().default(sql`'{}'::text[]`),
   timeZone: text("time_zone").notNull(),
+  /** WGS84 degrees. Null until geocoded (MAP-1 #51). */
+  lat: doublePrecision("lat"),
+  lng: doublePrecision("lng"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -175,6 +179,9 @@ export const practitioners = pgTable(
      * left out of /search, the home page and clinic pages. Who verified is in audit_log.
      */
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    /** Solo practices only: a practitioner at a clinic uses the clinic's lat/lng (MAP-1 #51). */
+    lat: doublePrecision("lat"),
+    lng: doublePrecision("lng"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
