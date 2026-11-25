@@ -10,9 +10,14 @@ How sign-in works in Care Track, and how to get it running locally and in produc
 | `lib/db/schema.ts` | Drizzle tables. `users`, `sessions`, `accounts`, `verifications` are the ones Better Auth reads and writes. |
 | `drizzle/0002_better_auth.sql` | The migration that creates those auth tables. |
 | `app/api/auth/[...all]/route.ts` | Better Auth's HTTP endpoints (`/api/auth/*`). |
-| `app/(auth)/actions.ts` | Sign-up, log-in and log-out server actions that the forms call. |
+| `app/(auth)/actions.ts` | Sign-up, log-in and log-out server actions that the forms call. Sign-up and log-in are rate-limited here. |
+| `lib/rate-limit.ts` | Postgres-backed attempt counters (`rate_limits` table) for log-in, sign-up and booking. Limits are in `LIMITS`. |
 | `lib/auth.ts` | `getViewer` / `requireRole`, which every page uses to check who is signed in. |
 | `proxy.ts` | Sends signed-out visitors to `/login` (it only checks that the cookie exists). |
+
+`/api/auth/sign-up/email` and `/api/auth/sign-in/email` are switched off over HTTP
+(`disabledPaths`), so every sign-up and log-in goes through the actions and their rate
+limits. The actions call `auth.api.*` directly, which still works.
 
 Better Auth does not create tables. It expects them to exist already, with the names
 and columns in `lib/db/schema.ts`. Drizzle migrations create them.

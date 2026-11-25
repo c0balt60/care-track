@@ -7,5 +7,8 @@ export default defineConfig({
   resolve: { tsconfigPaths: true },
   test: {
     environment: "jsdom",
+    // DB tests boot PGlite and run every migration in beforeAll; with many files starting
+    // at once that can pass the 10s default on slower machines.
+    hookTimeout: 30_000,
   },
 });
