@@ -223,6 +223,71 @@ describe("booking limits (SCH-8)", () => {
   });
 });
 
+describe("staff booking for a patient (SCH-6)", () => {
+  let atClinic: string;
+  let staff: { userId: string; clinicId: string };
+  const slot = (i: number) => new Date(TEN.getTime() + i * 30 * 60_000);
+  const staffBook = (patient: { patientId: string; userId: string | null }, practitionerId: string, start: Date, extra = {}) =>
+    bookSlot(patient, slotIdFor(practitionerId, start), "Check-up", NOW, { staff, ...extra });
+
+  beforeAll(async () => {
+    const [clinic] = await db
+      .insert(schema.clinics)
+      .values({ name: "Front Desk Clinic", address: "1 Main St", city: "Troy, NY", phone: "555-0100", timeZone: "America/New_York" })
+      .returning();
+    atClinic = await makePractitioner("approval");
+    await db.update(schema.practitioners).set({ clinicId: clinic.id }).where(eq(schema.practitioners.id, atClinic));
+    const [u] = await db.insert(schema.users).values({ email: "desk@test", name: "Desk", role: "staff" }).returning();
+    staff = { userId: u.id, clinicId: clinic.id };
+  });
+
+  it("confirms right away, even in approval mode, and records who booked", async () => {
+    const res = await staffBook(alice, atClinic, TEN);
+    expect(res).toMatchObject({ ok: true, status: "confirmed" });
+    if (!res.ok) return;
+
+    const [appt] = await db.select().from(schema.appointments).where(eq(schema.appointments.id, res.appointmentId));
+    expect(appt).toMatchObject({ patientId: alice.patientId, status: "confirmed", bookedBy: "staff" });
+    const events = await db.select().from(schema.appointmentEvents).where(eq(schema.appointmentEvents.appointmentId, appt.id));
+    expect(events.map(({ type, actorUserId, actorRole }) => ({ type, actorUserId, actorRole })).sort((a, b) => a.type.localeCompare(b.type))).toEqual([
+      { type: "booked", actorUserId: staff.userId, actorRole: "staff" },
+      { type: "confirmed", actorUserId: staff.userId, actorRole: "staff" },
+    ]);
+    const audits = await db.select().from(schema.auditLog).where(eq(schema.auditLog.entityId, appt.id));
+    expect(audits).toMatchObject([{ actorId: staff.userId, action: "appointment.book", diff: { bookedBy: { from: null, to: "staff" } } }]);
+  });
+
+  it("books for a patient with no account", async () => {
+    const [walkIn] = await db.insert(schema.patients).values({ name: "Walk In", userId: null }).returning();
+    expect(await staffBook({ patientId: walkIn.id, userId: null }, atClinic, TEN)).toMatchObject({ ok: true, status: "confirmed" });
+  });
+
+  it("only books for practitioners at the staff member's clinic", async () => {
+    expect(await staffBook(alice, approval, TEN)).toEqual({ ok: false, error: "clinic" }); // `approval` has no clinic
+    expect(await db.select().from(schema.appointments)).toHaveLength(0);
+  });
+
+  it("isn't held to the patient limits", async () => {
+    for (let i = 0; i <= BOOKING_LIMITS.upcomingPerPatient; i++) {
+      expect(await staffBook(alice, atClinic, slot(i))).toMatchObject({ ok: true });
+    }
+  });
+
+  it("doesn't move appointments for the patient", async () => {
+    expect(await staffBook(alice, atClinic, TEN, { rescheduleFromId: "00000000-0000-4000-8000-000000000000" })).toEqual({ ok: false, error: "reschedule" });
+  });
+
+  it("rolls back with the caller's transaction", async () => {
+    await expect(
+      db.transaction(async (tx) => {
+        expect(await staffBook(alice, atClinic, TEN, { tx })).toMatchObject({ ok: true });
+        throw new Error("the caller gave up");
+      }),
+    ).rejects.toThrow("the caller gave up");
+    expect(await db.select().from(schema.appointments)).toHaveLength(0);
+  });
+});
+
 describe("rescheduling", () => {
   const ELEVEN = new Date("2030-01-07T16:00:00Z");
   const move = (who: typeof alice, practitionerId: string, start: Date, fromId: string) =>

@@ -106,6 +106,11 @@ describe("searchPractitioners", () => {
     expect(names(await searchPractitioners({ clinicId: riverside, now: NOW }))).not.toContain("Dr. Early");
   });
 
+  it("includes them for staff booking at their own clinic (includeUnverified)", async () => {
+    // Early and Adams both open Monday at 9:00, so they tie and keep name order.
+    expect(names(await searchPractitioners({ clinicId: riverside, includeUnverified: true, now: NOW }))).toEqual(["Dr. Adams", "Dr. Early", "Dr. Carter"]);
+  });
+
   it("`days` shortens the window", async () => {
     // In the next 3 days (Mon–Wed) only Adams and Baker are open.
     const rows = await searchPractitioners({ days: 3, now: NOW });

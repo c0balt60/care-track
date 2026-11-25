@@ -44,6 +44,7 @@ So a failed sign-up would have logged the new patient's name, date of birth and 
 |---|---|---|
 | Errors and notices travel as short codes (`?error=reason`), never as text the user typed | Pass | Every `redirect()` in `app/` interpolates a code, a status or an id; the pages show only known keys (`noticeText()` in [`components/ui.tsx`](../components/ui.tsx)) |
 | Visit reasons, cancel reasons and decline notes are sent in POST bodies | Pass | The booking, cancel and decline forms are server actions |
+| The front desk's patient lookup (name + date of birth) never reaches the URL | Pass | Both staff actions use `useActionState`, so the details travel in the POST body and come back as state ([`app/(app)/book/[slotId]/staff-booking.tsx`](../app/(app)/book/[slotId]/staff-booking.tsx)) |
 | Record ids in URLs are random UUIDs, so they reveal nothing | Pass | `id()` columns in [`lib/db/schema.ts`](../lib/db/schema.ts) |
 | Admin searches put a user's name or email in the URL (`/admin?q=`, `/admin/audit?actor=`), and URLs appear in Vercel's request logs | Accepted | Admin-only pages; the app holds fake data only. If it ever held real data, these two forms should POST. |
 

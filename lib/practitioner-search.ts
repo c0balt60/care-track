@@ -39,6 +39,11 @@ export type SearchOptions = {
   maxWaitDays?: number;
   /** "nearest" needs `near`; practitioners with no known location go last. */
   sort?: "soonest" | "nearest";
+  /**
+   * Also list unverified practitioners. Only for staff booking at their own clinic
+   * (/clinic/book, SCH-6 #24), with the clinicId from their session. Never on a public page.
+   */
+  includeUnverified?: boolean;
   now?: Date;
 };
 
@@ -57,9 +62,9 @@ const verified = isNotNull(practitioners.verifiedAt);
  * are still listed, last, ordered by name.
  */
 export async function searchPractitioners({
-  service, clinicId, from, days, near, maxKm, maxWaitDays, sort = "soonest", now = new Date(),
+  service, clinicId, from, days, near, maxKm, maxWaitDays, sort = "soonest", includeUnverified = false, now = new Date(),
 }: SearchOptions = {}) {
-  const where: SQL[] = [verified];
+  const where: SQL[] = includeUnverified ? [] : [verified];
   const text = service?.trim();
   if (text) {
     const pattern = likePattern(text);
