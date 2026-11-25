@@ -7,7 +7,10 @@
 //
 // Everything here is public: what a practitioner offers and when they're free.
 // No patient data is read.
-import { and, asc, eq, ilike, or, sql, type SQL } from "drizzle-orm";
+//
+// Only verified practitioners are listed (ADM-2 #33). An admin verifies them on
+// /admin/practitioners. Their profile page still opens by direct link.
+import { and, asc, eq, ilike, isNotNull, or, sql, type SQL } from "drizzle-orm";
 import { dayKey } from "./dates";
 import { db } from "./db";
 import { clinics, practitioners } from "./db/schema";
@@ -32,12 +35,15 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 /** Makes user text safe inside ILIKE: % and _ are wildcards there, \ escapes them. */
 const likePattern = (text: string) => `%${text.replace(/[\\%_]/g, "\\$&")}%`;
 
+/** Unverified practitioners never leave the database for a listing. */
+const verified = isNotNull(practitioners.verifiedAt);
+
 /**
  * Matching practitioners, soonest opening first. Practitioners with no openings
  * are still listed, last, ordered by name.
  */
 export async function searchPractitioners({ service, clinicId, from, days, now = new Date() }: SearchOptions = {}) {
-  const where: SQL[] = [];
+  const where: SQL[] = [verified];
   const text = service?.trim();
   if (text) {
     const pattern = likePattern(text);
@@ -89,8 +95,11 @@ export async function searchPractitioners({ service, clinicId, from, days, now =
   });
 }
 
-/** Every specialty and service on offer, for the search box suggestions. */
+/** Every specialty and service on offer, for the search box suggestions. Verified practitioners only. */
 export async function listServices(): Promise<string[]> {
-  const rows = await db.select({ specialty: practitioners.specialty, services: practitioners.services }).from(practitioners);
+  const rows = await db
+    .select({ specialty: practitioners.specialty, services: practitioners.services })
+    .from(practitioners)
+    .where(verified);
   return [...new Set(rows.flatMap((r) => [r.specialty, ...r.services]))].sort();
 }

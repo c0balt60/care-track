@@ -51,6 +51,8 @@ export const users = pgTable(
     // Better Auth fields. Property names must stay camelCase: Better Auth looks them up by key.
     emailVerified: boolean("email_verified").notNull().default(false),
     image: text("image"),
+        /** Set when an admin disables the account (ADM-1 #32). Null means active. */
+    disabledAt: timestamp("disabled_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -168,6 +170,11 @@ export const practitioners = pgTable(
     bookingMode: text("booking_mode", { enum: BOOKING_MODES }).notNull().default("instant"),
     timeZone: text("time_zone").notNull(),
     slotMinutes: integer("slot_minutes").notNull(),
+    /**
+     * Set when an admin verifies the practitioner (ADM-2 #33). Null means unverified:
+     * left out of /search, the home page and clinic pages. Who verified is in audit_log.
+     */
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

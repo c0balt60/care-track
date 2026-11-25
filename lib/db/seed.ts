@@ -125,6 +125,7 @@ async function main() {
           bookingMode: p.bookingMode,
           timeZone: p.timeZone,
           slotMinutes: p.slotMinutes,
+          verifiedAt: new Date(), // unverified practitioners are hidden from search (ADM-2)
         })
         .returning({ id: schema.practitioners.id });
       practitionerId.set(p.id, row.id);

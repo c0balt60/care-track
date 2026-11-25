@@ -59,12 +59,21 @@ Set these in Vercel → Settings → Environment Variables, then redeploy:
 
 - `BETTER_AUTH_SECRET`: a fresh value from `openssl rand -base64 32`, never the dev one from `.env.example`
 - `BETTER_AUTH_URL`: the deployed address, e.g. `https://<app>.vercel.app`
-- `DATABASE_URL`: the production (Neon) connection string
+- `DATABASE_URL`: the production (Neon) pooled connection string
+- `DATABASE_URL_UNPOOLED`: the production (Neon) direct connection string, used by migrations
 
 Previews need their own database and secret; see [Preview deploys](auth-setup.md#preview-deploys).
 
-Nothing runs migrations on deploy. After pulling new files in `drizzle/`, migrate the
-production database from your machine:
+Every Vercel deploy (Production and Preview) runs migrations before building:
+`vercel.json` sets `buildCommand` to `pnpm db:migrate && pnpm build`. If a migration
+fails, the build fails and the old deployment stays live.
+
+The old deployment keeps serving traffic while the new one builds, so it runs against
+the already-migrated schema for a minute or two. Write migrations that the previous
+code can survive: add columns as nullable (or with a default) first, and drop or rename
+columns in a later deploy, after no code reads them.
+
+To migrate by hand (e.g. to retry), run from your machine:
 ```bash
 DATABASE_URL_UNPOOLED="<production unpooled url>" pnpm exec drizzle-kit migrate
 ```

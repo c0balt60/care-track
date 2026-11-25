@@ -21,11 +21,21 @@ const names = (rows: { practitioner: { name: string } }[]) => rows.map((r) => r.
 
 let riverside: string;
 
-/** Open on the given weekdays (0 = Sunday), 9:00–12:00. */
-async function makePractitioner(name: string, specialty: string, services: string[], weekdays: number[], clinicId: string | null = null) {
+/** Open on the given weekdays (0 = Sunday), 9:00–12:00. Verified unless `verified` is false. */
+async function makePractitioner(
+  name: string,
+  specialty: string,
+  services: string[],
+  weekdays: number[],
+  clinicId: string | null = null,
+  verified = true,
+) {
   const [p] = await db
     .insert(schema.practitioners)
-    .values({ name, credentials: "MD", specialty, services, city: "Troy, NY", timeZone: NY, slotMinutes: 30, clinicId })
+    .values({
+      name, credentials: "MD", specialty, services, city: "Troy, NY", timeZone: NY, slotMinutes: 30, clinicId,
+      verifiedAt: verified ? NOW : null,
+    })
     .returning();
   if (weekdays.length) {
     await db.insert(schema.availabilityRules).values(weekdays.map((weekday) => ({ practitionerId: p.id, weekday, startTime: "09:00", endTime: "12:00" })));
@@ -45,6 +55,8 @@ beforeAll(async () => {
   await makePractitioner("Dr. Adams", "Family medicine", ["Annual physical", "Flu shot"], [1], riverside);
   await makePractitioner("Dr. Dunn", "Pediatrics", ["Well-child visit"], []);
   await makePractitioner("Dr. Baker", "Physical therapy", ["Sports injury", "100% recovery plan"], [3]);
+  // Unverified (ADM-2): open Monday at Riverside, so if it leaked it would top every list below.
+  await makePractitioner("Dr. Early", "Allergy", ["Allergy testing"], [1], riverside, false);
 });
 
 describe("searchPractitioners", () => {
@@ -87,6 +99,12 @@ describe("searchPractitioners", () => {
     expect(names(rows)).toEqual(["Dr. Adams", "Dr. Baker", "Dr. Carter", "Dr. Dunn"]);
   });
 
+  it("leaves out unverified practitioners, even when they match", async () => {
+    expect(await searchPractitioners({ service: "allergy", now: NOW })).toEqual([]);
+    expect(names(await searchPractitioners({ now: NOW }))).not.toContain("Dr. Early");
+    expect(names(await searchPractitioners({ clinicId: riverside, now: NOW }))).not.toContain("Dr. Early");
+  });
+
   it("`days` shortens the window", async () => {
     // In the next 3 days (Mon–Wed) only Adams and Baker are open.
     const rows = await searchPractitioners({ days: 3, now: NOW });
@@ -100,5 +118,11 @@ describe("listServices", () => {
     expect(all).toContain("Dermatology");
     expect(all).toContain("Flu shot");
     expect(all).toEqual([...new Set(all)].sort());
+  });
+
+  it("doesn't suggest what only unverified practitioners offer", async () => {
+    const all = await listServices();
+    expect(all).not.toContain("Allergy");
+    expect(all).not.toContain("Allergy testing");
   });
 });

@@ -1,5 +1,5 @@
 {
-  "id": "1a96599f-2707-4f22-a25f-4ff54b662dab",
+  "id": "87a1e7e8-7d23-43a7-998c-b2b3a60d1dcb",
   "prevId": "dc0ae2c9-c335-4c96-a71a-cc7928b19224",
   "version": "7",
   "dialect": "postgresql",
@@ -1341,37 +1341,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.rate_limits": {
-      "name": "rate_limits",
-      "schema": "",
-      "columns": {
-        "key": {
-          "name": "key",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "window_start": {
-          "name": "window_start",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "count": {
-          "name": "count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.sessions": {
       "name": "sessions",
       "schema": "",
@@ -1520,6 +1489,12 @@
         "image": {
           "name": "image",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "disabled_at": {
+          "name": "disabled_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },

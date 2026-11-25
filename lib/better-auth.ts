@@ -9,6 +9,8 @@ import { nextCookies } from "better-auth/next-js";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { db } from "./db";
 import * as schema from "./db/schema";
+import { eq } from "drizzle-orm";
+import { APIError } from "better-auth/api";
 
 // Vercel previews get a new URL per push, so a fixed BETTER_AUTH_URL can't match them and
 // log-in fails with "Invalid origin". On a preview, use the branch URL Vercel sets and also
@@ -62,6 +64,25 @@ export const auth = betterAuth({
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // extend the expiry at most once a day while in use
+  },
+
+    // A disabled account can't start a new session. Admins disable accounts from /admin, which
+  // also deletes the sessions it already has, so it's signed out right away.
+  databaseHooks: {
+    session: {
+      create: {
+        before: async (session) => {
+          const [user] = await db
+            .select({ disabledAt: schema.users.disabledAt })
+            .from(schema.users)
+            .where(eq(schema.users.id, session.userId))
+            .limit(1);
+          if (user?.disabledAt) {
+            throw new APIError("FORBIDDEN", { message: "This account has been disabled.", code: "ACCOUNT_DISABLED" });
+          }
+        },
+      },
+    },
   },
 
   advanced: {

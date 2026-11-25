@@ -61,8 +61,22 @@
     {
       "idx": 8,
       "version": "7",
-      "when": 1795546651356,
-      "tag": "0008_rate_limits",
+      "when": 1795620557015,
+      "tag": "0008_user_disabled_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795628300666,
+      "tag": "0009_practitioner_verified_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795641272291,
+      "tag": "0010_rate_limits",
       "breakpoints": true
     }
   ]

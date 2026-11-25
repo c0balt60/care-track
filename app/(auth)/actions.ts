@@ -133,6 +133,9 @@ export async function logIn(_prev: FormState, form: FormData): Promise<FormState
     if (isAPIError(err) && (err.status === "UNAUTHORIZED" || err.status === "BAD_REQUEST")) {
       return { error: "Email or password is incorrect." };
     }
+    if (isAPIError(err) && err.body?.code === "ACCOUNT_DISABLED") {
+      return { error: "This account has been disabled. Contact an administrator." };
+    }
     logError(err, "Log-in failed");
     return { error: "Something went wrong. Please try again." };
   }
