@@ -38,6 +38,7 @@ export const config = {
   matcher: [
     "/api/:path*",
     "/appointments/:path*",
+    "/admin/:path*",
     "/availability/:path*",
     "/book/:path*",
     "/clinic/:path*",

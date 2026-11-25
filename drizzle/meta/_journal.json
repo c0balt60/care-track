@@ -57,6 +57,13 @@
       "when": 1795478601790,
       "tag": "0007_reminder_sent_at",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795620557015,
+      "tag": "0008_user_disabled_at",
+      "breakpoints": true
     }
   ]
 }
