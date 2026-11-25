@@ -90,6 +90,7 @@ export const bookingErrors = {
   staff: "Booking for a patient from the front desk isn't ready yet.",
   reschedule: "That appointment can't be moved anymore. Check your appointments for its latest status.",
   reschedule_pending: "You already asked to move that appointment. Withdraw that request first to pick a different time.",
+  too_many: "Too many booking attempts. Try again later.",
 };
 export type BookingError = keyof typeof bookingErrors;
 

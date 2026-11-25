@@ -12,6 +12,7 @@ import { auth } from "@/lib/better-auth";
 import { db } from "@/lib/db";
 import { patients, users } from "@/lib/db/schema";
 import { logger } from "@/lib/logger";
+import { clientIp, LIMITS, rateLimit, tooManyAttempts } from "@/lib/rate-limit";
 import { safeNext } from "@/lib/safe-next";
 
 export type FormState = { error?: string };
@@ -57,11 +58,16 @@ export async function signUp(_prev: FormState, form: FormData): Promise<FormStat
     if (!phone || phone.length > 40) return { error: "Enter your phone number." };
   }
 
+  // After validation, so typos don't use up attempts; before the account is made.
+  const h = await headers();
+  const wait = await rateLimit(`signup:ip:${clientIp(h)}`, LIMITS.signupPerIp);
+  if (wait) return { error: tooManyAttempts(wait) };
+
   let userId: string;
   try {
     // Creates the user (role defaults to "patient"), the credential account with the
     // scrypt hash, and a session, then sets the httpOnly session cookie.
-    const res = await auth.api.signUpEmail({ body: { name, email, password }, headers: await headers() });
+    const res = await auth.api.signUpEmail({ body: { name, email, password }, headers: h });
     userId = res.user.id;
   } catch (err) {
     if (isAPIError(err)) {
@@ -102,8 +108,15 @@ export async function logIn(_prev: FormState, form: FormData): Promise<FormState
   const password = form.get("password");
   if (!email || typeof password !== "string" || !password) return { error: "Enter your email and password." };
 
+  // Per IP stops one attacker trying many accounts; per email stops many IPs trying one account.
+  const h = await headers();
+  const wait =
+    (await rateLimit(`login:ip:${clientIp(h)}`, LIMITS.loginPerIp)) ||
+    (await rateLimit(`login:email:${email.toLowerCase()}`, LIMITS.loginPerEmail));
+  if (wait) return { error: tooManyAttempts(wait) };
+
   try {
-    await auth.api.signInEmail({ body: { email, password }, headers: await headers() });
+    await auth.api.signInEmail({ body: { email, password }, headers: h });
   } catch (err) {
     // One message for wrong email and wrong password, so the form doesn't reveal who has an account.
     if (isAPIError(err) && (err.status === "UNAUTHORIZED" || err.status === "BAD_REQUEST")) {

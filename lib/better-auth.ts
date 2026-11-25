@@ -34,7 +34,10 @@ export const auth = betterAuth({
   // must go through the signUp server action, which validates the profile fields and
   // creates the patients row. auth.api.signUpEmail() skips the HTTP router, so the
   // action still works.
-  disabledPaths: ["/sign-up/email"],
+  //
+  // Sign-in is blocked over HTTP for the same reason: the logIn action rate-limits it
+  // (HRD-2 #36), and an open /api/auth/sign-in/email would let scripts skip that limit.
+  disabledPaths: ["/sign-up/email", "/sign-in/email"],
 
   emailAndPassword: {
     enabled: true,

@@ -6,6 +6,7 @@ import { getViewer, getViewerAs } from "@/lib/auth";
 import { bookSlot } from "@/lib/booking";
 import { after } from "next/server";
 import { notifyAppointment } from "@/lib/appointment-emails";
+import { LIMITS, rateLimit } from "@/lib/rate-limit";
 
 /**
  * Books the slot for the signed-in patient. Bound to the slot id, and to the
@@ -22,6 +23,9 @@ export async function bookAppointment(slotId: string, rescheduleFromId: string |
     // Staff booking for a patient is SCH-6 (#24).
     redirect((await getViewer()) ? `${here}${join}error=staff` : `/login?next=${encodeURIComponent(here)}`);
   }
+
+  // Per signed-in user, not IP: only patients get this far.
+  if (await rateLimit(`booking:user:${patient.userId}`, LIMITS.bookingPerUser)) redirect(`${here}${join}error=too_many`);
 
   const result = await bookSlot(patient, slotId, formData.get("reason"), new Date(), { rescheduleFromId });
   if (!result.ok) redirect(`${here}${join}error=${result.error}`);

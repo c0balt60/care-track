@@ -382,3 +382,13 @@ export const auditLog = pgTable(
     index("audit_log_actor_idx").on(t.actorId, t.at),
   ],
 );
+
+/**
+ * Fixed-window counters for lib/rate-limit.ts (HRD-2 #36). One row per key, such as
+ * "login:ip:203.0.113.7". Lives in Postgres so every server instance shares the counts.
+ */
+export const rateLimits = pgTable("rate_limits", {
+  key: text("key").primaryKey(),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+  count: integer("count").notNull(),
+});
