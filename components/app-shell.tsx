@@ -12,7 +12,7 @@ const roleLabel = { patient: "Patient", practitioner: "Practitioner", staff: "Cl
 // The links only decide what's shown; each page checks access itself with requireRole().
 function Nav({ viewer, pending }: { viewer: Viewer; pending: number }) {
     const items: [label: string, href: string][] =
-    viewer.role === "admin" ? [["Home", "/dashboard"], ["Users", "/admin"], ["Audit log", "/admin/audit"]]
+    viewer.role === "admin" ? [["Home", "/dashboard"], ["Users", "/admin"], ["Practitioners", "/admin/practitioners"], ["Audit log", "/admin/audit"]]
     // Accounts without their profile row only have the dashboard for now.
     : !hasProfile(viewer) ? [["Home", "/dashboard"]]
     : viewer.role === "patient" ? [["Home", "/dashboard"], ["Find care", "/search"], ["Appointments", "/appointments"], ["Settings", "/settings"]]

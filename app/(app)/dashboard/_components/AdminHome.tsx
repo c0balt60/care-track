@@ -10,7 +10,7 @@ export default function AdminHome({ name }: { name: string }) {
         <ul className="mt-3 space-y-2">
           <li><Link href="/admin" className="link">Users</Link>: change roles and disable accounts</li>
           <li><Link href="/admin/audit" className="link">Audit log</Link>: find who did what, and when</li>
-          <li className="text-muted">Verify practitioners (ADM-2) is coming soon</li>
+          <li><Link href="/admin/practitioners" className="link">Practitioners</Link>: verify who shows up in search</li>
         </ul>
       </section>
     </>

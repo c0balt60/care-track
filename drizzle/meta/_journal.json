@@ -64,6 +64,13 @@
       "when": 1795620557015,
       "tag": "0008_user_disabled_at",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795628300666,
+      "tag": "0009_practitioner_verified_at",
+      "breakpoints": true
     }
   ]
 }
