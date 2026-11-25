@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Notice, noticeText, PageHeader, param } from "@/components/ui";
 import { adminErrors, listUsers } from "@/lib/admin-users";
@@ -25,7 +26,10 @@ export default async function Admin({
 
   return (
     <>
-      <PageHeader title="Users" description="Change roles and disable accounts. Every change is recorded in the audit log." />
+      <PageHeader
+        title="Users"
+        description={<>Change roles and disable accounts. Every change is recorded in the <Link href="/admin/audit" className="link">audit log</Link>.</>}
+      />
       {notice && <Notice>{notice}</Notice>}
       {error && <Notice>{error}</Notice>}
 
