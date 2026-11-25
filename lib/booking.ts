@@ -7,18 +7,30 @@
 // Double bookings are stopped by the appointments_no_overlap constraint (DB-3 #9),
 // not by checking first: two people can pass any check at the same moment, but only
 // one insert can win. The loser gets error "taken", which the page shows kindly.
-import { and, eq, gt, lt, notInArray } from "drizzle-orm";
+import { and, count, eq, gt, isNull, lt, notInArray, or } from "drizzle-orm";
 import { can } from "./appointment-rules";
 import { audit } from "./audit";
 import { addDays, dayKey } from "./dates";
 import { db } from "./db";
-import { appointmentEvents, appointments, availabilityExceptions, availabilityRules, clinics, practitioners } from "./db/schema";
+import { appointmentEvents, appointments, availabilityExceptions, availabilityRules, clinics, patients, practitioners } from "./db/schema";
 import { generateSlots } from "./slots";
 import { id, isId, parse, requiredText } from "./validation";
 import { z } from "zod";
 
 /** How far ahead patients can book. Matches the prototype (open question 4 in the outline). */
 export const BOOKING_WINDOW_DAYS = 28;
+
+/**
+ * The most one patient can hold at once, so nobody can sit on a practitioner's whole week
+ * (SCH-8 #63). Change the numbers here; the checks and the messages read them.
+ * A reschedule replaces an appointment rather than adding one, so it never counts.
+ */
+export const BOOKING_LIMITS = {
+  /** Upcoming appointments, pending or confirmed, across all practitioners. */
+  upcomingPerPatient: 3,
+  /** Requests waiting for one practitioner's answer. */
+  pendingPerPractitioner: 1,
+} as const;
 
 /** Builds the id used in /book/[slotId] links. */
 export const slotIdFor = (practitionerId: string, start: Date) => `${practitionerId}_${start.getTime()}`;
@@ -91,6 +103,9 @@ export const bookingErrors = {
   reschedule: "That appointment can't be moved anymore. Check your appointments for its latest status.",
   reschedule_pending: "You already asked to move that appointment. Withdraw that request first to pick a different time.",
   too_many: "Too many booking attempts. Try again later.",
+  limit: `You already have ${BOOKING_LIMITS.upcomingPerPatient} upcoming appointments. Cancel one, or wait until one has passed, to book another.`,
+  pending_exists:
+    "You already have a request waiting with this practitioner. Wait for their answer, or withdraw it, before asking for another time.",
 };
 export type BookingError = keyof typeof bookingErrors;
 
@@ -159,6 +174,9 @@ export async function bookSlot(
         if (status === "confirmed" && !(await replaceOld(tx, rescheduleFromId, patient.userId, "patient", now))) {
           throw new BookingRefused("reschedule");
         }
+      } else {
+        // A reschedule swaps one appointment for another, so only new bookings are limited.
+        await checkLimits(tx, patient.patientId, practitioner.id, status, now);
       }
 
       const [appt] = await tx
@@ -209,6 +227,39 @@ export async function bookSlot(
 
 /** A transaction handle from db.transaction(). */
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Refuses a new booking that would put the patient over BOOKING_LIMITS (SCH-8 #63).
+ *
+ * Counted: the patient's appointments that haven't started and are confirmed, or pending as
+ * a new request. A pending *move* request (pending with rescheduled_from_id) isn't counted:
+ * it replaces the confirmed appointment that is already counted.
+ *
+ * The patient's row is locked first, so two bookings at the same moment take turns: the
+ * second one waits here, then counts the first. Without the lock both could see 2 and
+ * both book, leaving the patient with 4.
+ */
+async function checkLimits(tx: Tx, patientId: string, practitionerId: string, status: "pending" | "confirmed", now: Date) {
+  await tx.select({ id: patients.id }).from(patients).where(eq(patients.id, patientId)).for("update");
+
+  const isNewRequest = and(eq(appointments.status, "pending"), isNull(appointments.rescheduledFromId));
+  const upcoming = and(eq(appointments.patientId, patientId), gt(appointments.startsAt, now));
+
+  const [{ held }] = await tx
+    .select({ held: count() })
+    .from(appointments)
+    .where(and(upcoming, or(eq(appointments.status, "confirmed"), isNewRequest)));
+  if (held >= BOOKING_LIMITS.upcomingPerPatient) throw new BookingRefused("limit");
+
+  // Only a booking that would itself wait for an answer is held to the one-request rule.
+  if (status === "pending") {
+    const [{ waiting }] = await tx
+      .select({ waiting: count() })
+      .from(appointments)
+      .where(and(upcoming, eq(appointments.practitionerId, practitionerId), isNewRequest));
+    if (waiting >= BOOKING_LIMITS.pendingPerPractitioner) throw new BookingRefused("pending_exists");
+  }
+}
 
 /**
  * The appointment being moved must be the patient's, with the same practitioner,
