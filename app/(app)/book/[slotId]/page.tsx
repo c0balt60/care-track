@@ -6,9 +6,10 @@ import { requireRole } from "@/lib/auth";
 import { loadAppointmentFor } from "@/lib/appointments";
 import { bookingErrors, loadBookableSlot, type BookingError } from "@/lib/booking";
 import { bookAppointment } from "./actions";
+import { StaffBooking } from "./staff-booking";
 
 // Patients book for themselves here, or move an appointment (?reschedule=<id>).
-// Not yet on real data: staff booking for a patient (SCH-6 #24).
+// Staff book for a patient at their clinic (SCH-6 #24): see staff-booking.tsx.
 export default async function Book({ params, searchParams }: PageProps<"/book/[slotId]">) {
   const viewer = await requireRole("patient", "staff");
   const { slotId } = await params;
@@ -42,12 +43,14 @@ export default async function Book({ params, searchParams }: PageProps<"/book/[s
   const found = await loadBookableSlot(slotId);
   // Back to the practitioner's times (still mid-reschedule, if moving). If the slot id
   // didn't match a real slot we don't know whose it was, so search instead.
-  const back = found
-    ? `/practitioners/${found.practitioner.id}${rescheduleFromId ? `?${new URLSearchParams({ reschedule: rescheduleFromId })}` : ""}`
+  // Staff go back to their clinic's booking page.
+  const back =
+    viewer.role === "staff" ? "/clinic/book"
+    : found ? `/practitioners/${found.practitioner.id}${rescheduleFromId ? `?${new URLSearchParams({ reschedule: rescheduleFromId })}` : ""}`
     : "/search";
   const backLink = (
     <Link href={back} className="link mb-4 inline-flex min-h-11 items-center gap-1 text-sm">
-      <ArrowLeftIcon width={16} height={16} /> {found ? "Back to times" : "Back to search"}
+      <ArrowLeftIcon width={16} height={16} /> {found || viewer.role === "staff" ? "Back to times" : "Back to search"}
     </Link>
   );
 
@@ -106,10 +109,7 @@ export default async function Book({ params, searchParams }: PageProps<"/book/[s
       )}
 
       {viewer.role === "staff" ? (
-        <p className="mt-6 flex items-start gap-2 text-sm text-muted">
-          <InfoIcon className="mt-px shrink-0 text-blue-700" width={18} height={18} />
-          {bookingErrors.staff}
-        </p>
+        <StaffBooking slotId={slotId} />
       ) : (
         <form action={bookAppointment.bind(null, slotId, rescheduleFromId)} className="mt-6 space-y-4">
           <p className="text-sm text-muted">

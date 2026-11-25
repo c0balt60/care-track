@@ -27,6 +27,9 @@ export const LIMITS = {
   loginPerEmail: { max: 10, windowSeconds: 15 * 60 },
   signupPerIp: { max: 5, windowSeconds: 60 * 60 },
   bookingPerUser: { max: 20, windowSeconds: 60 * 60 },
+  // Staff patient lookups need an exact name and date of birth. The cap keeps anyone from
+  // trying date after date for a name they know (SCH-6 #24).
+  patientLookupPerUser: { max: 30, windowSeconds: 15 * 60 },
 } as const;
 
 /**

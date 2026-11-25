@@ -4,7 +4,7 @@ import { auditLog } from "./db/schema";
 
 /** `db` or a transaction. Pass the transaction so the audit row commits or rolls back with the change. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Executor = PgDatabase<PgQueryResultHKT, any>;
+export type Executor = PgDatabase<PgQueryResultHKT, any>;
 
 /** What changed, as `{ field: { from, to } }`. Must be JSON-serializable. */
 export type AuditDiff = Record<string, { from: unknown; to: unknown }>;

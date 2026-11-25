@@ -5,7 +5,7 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { approve, cancel, decline, loadAppointmentFor } from "./appointments";
 import type { ReadyViewer } from "./auth";
-import { bookSlot, isPendingMoveClash, loadBookableSlot, slotIdFor } from "./booking";
+import { BOOKING_LIMITS, bookingErrors, bookSlot, isPendingMoveClash, loadBookableSlot, slotIdFor } from "./booking";
 import { db } from "./db";
 import * as schema from "./db/schema";
 
@@ -139,6 +139,152 @@ describe("bookSlot", () => {
     it.each([["empty", "   "], ["too long", "x".repeat(1001)]])("a reason that's %s", async (_, reason) => {
       expect(await book(alice, instant, TEN, reason)).toEqual({ ok: false, error: "reason" });
     });
+  });
+});
+
+describe("booking limits (SCH-8)", () => {
+  const max = BOOKING_LIMITS.upcomingPerPatient;
+  /** The i-th half-hour slot from 10:00 New York time. */
+  const slot = (i: number) => new Date(TEN.getTime() + i * 30 * 60_000);
+  const move = (practitionerId: string, start: Date, fromId: string) =>
+    bookSlot(alice, slotIdFor(practitionerId, start), "Check-up", NOW, { rescheduleFromId: fromId });
+  const setStatus = (id: string, status: "confirmed" | "cancelled" | "declined") =>
+    db.update(schema.appointments).set({ status }).where(eq(schema.appointments.id, id));
+
+  /** Books alice `n` instant appointments, starting at slot `from`. */
+  async function fill(n: number, from = 0) {
+    const ids: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const res = await book(alice, instant, slot(from + i));
+      if (!res.ok) throw new Error(`booking ${i} failed: ${res.error}`);
+      ids.push(res.appointmentId);
+    }
+    return ids;
+  }
+
+  it("refuses one past the limit, with a message that says so", async () => {
+    await fill(max);
+    expect(await book(alice, instant, slot(max))).toEqual({ ok: false, error: "limit" });
+    expect(bookingErrors.limit).toContain(`${max} upcoming appointments`);
+    expect(await db.select().from(schema.appointments)).toHaveLength(max);
+    // The limit is per patient: someone else can still book.
+    expect(await book(bob, instant, slot(max))).toMatchObject({ ok: true });
+  });
+
+  it("doesn't count cancelled or declined appointments", async () => {
+    const ids = await fill(max);
+    await setStatus(ids[0], "cancelled");
+    expect(await book(alice, instant, slot(max))).toMatchObject({ ok: true });
+    await setStatus(ids[1], "declined");
+    expect(await book(alice, instant, slot(max + 1))).toMatchObject({ ok: true });
+  });
+
+  it("doesn't count appointments that have already started", async () => {
+    const past = new Date("2030-01-06T15:00:00Z");
+    await db.insert(schema.appointments).values(
+      Array.from({ length: max }, (_, i) => ({
+        practitionerId: instant, patientId: alice.patientId, status: "confirmed" as const, bookedBy: "patient" as const,
+        startsAt: new Date(past.getTime() + i * 3_600_000), endsAt: new Date(past.getTime() + i * 3_600_000 + 1_800_000),
+      })),
+    );
+    expect(await book(alice, instant, TEN)).toMatchObject({ ok: true });
+  });
+
+  it("allows one waiting request per practitioner, and another once it's answered", async () => {
+    const first = await book(alice, approval, slot(0));
+    expect(first).toMatchObject({ ok: true, status: "pending" });
+    expect(await book(alice, approval, slot(1))).toEqual({ ok: false, error: "pending_exists" });
+    // A different practitioner is fine.
+    expect(await book(alice, instant, slot(2))).toMatchObject({ ok: true });
+    if (!first.ok) return;
+    await setStatus(first.appointmentId, "declined");
+    expect(await book(alice, approval, slot(1))).toMatchObject({ ok: true, status: "pending" });
+  });
+
+  it("doesn't count an instant-mode reschedule as another booking", async () => {
+    const ids = await fill(max);
+    expect(await move(instant, slot(max), ids[0])).toMatchObject({ ok: true, status: "confirmed" });
+    expect(await book(alice, instant, slot(max + 1))).toEqual({ ok: false, error: "limit" }); // still at the limit
+  });
+
+  it("doesn't count an approval-mode move request, for the limit or for the one-request rule", async () => {
+    const res = await book(alice, approval, slot(0));
+    if (!res.ok) throw new Error("booking failed");
+    await setStatus(res.appointmentId, "confirmed");
+    const others = await fill(max - 1, 1); // at the limit now
+
+    // Moving is allowed at the limit: it replaces an appointment.
+    expect(await move(approval, slot(max), res.appointmentId)).toMatchObject({ ok: true, status: "pending" });
+
+    // One below the limit again. If the move request counted, this would hit the limit, or the
+    // one-request rule for this practitioner. It does neither.
+    await setStatus(others[0], "cancelled");
+    expect(await book(alice, approval, slot(max + 1))).toMatchObject({ ok: true, status: "pending" });
+  });
+});
+
+describe("staff booking for a patient (SCH-6)", () => {
+  let atClinic: string;
+  let staff: { userId: string; clinicId: string };
+  const slot = (i: number) => new Date(TEN.getTime() + i * 30 * 60_000);
+  const staffBook = (patient: { patientId: string; userId: string | null }, practitionerId: string, start: Date, extra = {}) =>
+    bookSlot(patient, slotIdFor(practitionerId, start), "Check-up", NOW, { staff, ...extra });
+
+  beforeAll(async () => {
+    const [clinic] = await db
+      .insert(schema.clinics)
+      .values({ name: "Front Desk Clinic", address: "1 Main St", city: "Troy, NY", phone: "555-0100", timeZone: "America/New_York" })
+      .returning();
+    atClinic = await makePractitioner("approval");
+    await db.update(schema.practitioners).set({ clinicId: clinic.id }).where(eq(schema.practitioners.id, atClinic));
+    const [u] = await db.insert(schema.users).values({ email: "desk@test", name: "Desk", role: "staff" }).returning();
+    staff = { userId: u.id, clinicId: clinic.id };
+  });
+
+  it("confirms right away, even in approval mode, and records who booked", async () => {
+    const res = await staffBook(alice, atClinic, TEN);
+    expect(res).toMatchObject({ ok: true, status: "confirmed" });
+    if (!res.ok) return;
+
+    const [appt] = await db.select().from(schema.appointments).where(eq(schema.appointments.id, res.appointmentId));
+    expect(appt).toMatchObject({ patientId: alice.patientId, status: "confirmed", bookedBy: "staff" });
+    const events = await db.select().from(schema.appointmentEvents).where(eq(schema.appointmentEvents.appointmentId, appt.id));
+    expect(events.map(({ type, actorUserId, actorRole }) => ({ type, actorUserId, actorRole })).sort((a, b) => a.type.localeCompare(b.type))).toEqual([
+      { type: "booked", actorUserId: staff.userId, actorRole: "staff" },
+      { type: "confirmed", actorUserId: staff.userId, actorRole: "staff" },
+    ]);
+    const audits = await db.select().from(schema.auditLog).where(eq(schema.auditLog.entityId, appt.id));
+    expect(audits).toMatchObject([{ actorId: staff.userId, action: "appointment.book", diff: { bookedBy: { from: null, to: "staff" } } }]);
+  });
+
+  it("books for a patient with no account", async () => {
+    const [walkIn] = await db.insert(schema.patients).values({ name: "Walk In", userId: null }).returning();
+    expect(await staffBook({ patientId: walkIn.id, userId: null }, atClinic, TEN)).toMatchObject({ ok: true, status: "confirmed" });
+  });
+
+  it("only books for practitioners at the staff member's clinic", async () => {
+    expect(await staffBook(alice, approval, TEN)).toEqual({ ok: false, error: "clinic" }); // `approval` has no clinic
+    expect(await db.select().from(schema.appointments)).toHaveLength(0);
+  });
+
+  it("isn't held to the patient limits", async () => {
+    for (let i = 0; i <= BOOKING_LIMITS.upcomingPerPatient; i++) {
+      expect(await staffBook(alice, atClinic, slot(i))).toMatchObject({ ok: true });
+    }
+  });
+
+  it("doesn't move appointments for the patient", async () => {
+    expect(await staffBook(alice, atClinic, TEN, { rescheduleFromId: "00000000-0000-4000-8000-000000000000" })).toEqual({ ok: false, error: "reschedule" });
+  });
+
+  it("rolls back with the caller's transaction", async () => {
+    await expect(
+      db.transaction(async (tx) => {
+        expect(await staffBook(alice, atClinic, TEN, { tx })).toMatchObject({ ok: true });
+        throw new Error("the caller gave up");
+      }),
+    ).rejects.toThrow("the caller gave up");
+    expect(await db.select().from(schema.appointments)).toHaveLength(0);
   });
 });
 

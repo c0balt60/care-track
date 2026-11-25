@@ -47,7 +47,7 @@ vi.mock("next/server", async (original) => ({ ...(await original<object>()), aft
 const { db } = await import("@/lib/db");
 const schema = await import("@/lib/db/schema");
 const appointmentActions = await import("@/app/(app)/appointments/[id]/actions");
-const { bookAppointment } = await import("@/app/(app)/book/[slotId]/actions");
+const { bookAppointment, bookForPatient, lookupPatient } = await import("@/app/(app)/book/[slotId]/actions");
 const { removeException } = await import("@/app/(app)/availability/actions");
 const { removePractitioner, updateClinicProfile } = await import("@/app/(app)/clinic/actions");
 const { updatePatientDetails, updatePractitionerProfile } = await import("@/app/(app)/settings/actions");
@@ -243,10 +243,56 @@ describe("booking", () => {
     expect(where).toContain("error=reschedule");
   });
 
-  it("only patients can book; other roles are turned away", async () => {
+  it("only patients book for themselves; other roles are turned away", async () => {
     const [slot] = (await openSlotsFor([{ id: id.pracA, timeZone: "UTC", slotMinutes: 30 }])).get(id.pracA)!;
     for (const who of ["staffX", "pracA", "admin"] as const) {
       expect(await expectNoChange(who, () => bookAppointment(slot.id, null, form({ reason: "Hi" }))), who).toContain("error=staff");
+    }
+  });
+});
+
+// SCH-6 #24. These actions return form state (useActionState) instead of redirecting on errors.
+describe("staff booking for a patient", () => {
+  const slotOfA = async () => (await openSlotsFor([{ id: id.pracA, timeZone: "UTC", slotMinutes: 30 }])).get(id.pracA)![0];
+  const p1 = { name: "P One", dob: "1990-01-01" };
+
+  /** Runs a state-returning action as `who`; the database must be exactly as it was. */
+  async function refused(who: Who, action: () => Promise<{ error?: string }>) {
+    const before = await snapshot();
+    session.viewer = as[who]();
+    const state = await action();
+    expect(await snapshot()).toEqual(before);
+    return state.error;
+  }
+
+  it("staff can't book for another clinic's practitioner", async () => {
+    const slot = await slotOfA();
+    const error = await refused("staffY", () => bookForPatient(slot.id, {}, form({ mode: "existing", patientId: id.p1, ...p1, reason: "Hi" })));
+    expect(error).toMatch(/your clinic/);
+  });
+
+  it("a patient id that doesn't match the looked-up name and date of birth is refused", async () => {
+    const slot = await slotOfA();
+    // P2's id, sent with P1's details: an edited form trying to book for someone else.
+    const error = await refused("staffX", () => bookForPatient(slot.id, {}, form({ mode: "existing", patientId: id.p2, ...p1, reason: "Hi" })));
+    expect(error).toMatch(/doesn't match/);
+  });
+
+  it("a new patient isn't left behind when the booking fails", async () => {
+    const slot = await slotOfA();
+    const error = await refused("staffY", () =>
+      bookForPatient(slot.id, {}, form({ mode: "new", name: "Brand New", dob: "1985-05-05", phone: "555-0150", reason: "Hi" })),
+    );
+    expect(error).toMatch(/your clinic/); // and the snapshot shows no new patient
+  });
+
+  it("only staff can look patients up or book for them", async () => {
+    const slot = await slotOfA();
+    for (const who of ["patient1", "pracA", "admin"] as const) {
+      expect(await refused(who, () => lookupPatient({}, form(p1))), who).toMatch(/Only clinic staff/);
+      expect(await refused(who, () => bookForPatient(slot.id, {}, form({ mode: "existing", patientId: id.p1, ...p1, reason: "Hi" }))), who).toMatch(
+        /Only clinic staff/,
+      );
     }
   });
 });
@@ -335,5 +381,29 @@ describe("the right person can still do it, and it's audited", () => {
   it("a patient can edit their own details", async () => {
     expect(await attempt("patient2", () => updatePatientDetails(form({ name: "P Two", dob: "1991-02-02", phone: "555-0177" })))).toBe("/settings?notice=saved");
     expect(await actions()).toEqual(["patient.update"]);
+  });
+
+  it("staff can look up a patient and book them with a practitioner at their clinic", async () => {
+    const [slot] = (await openSlotsFor([{ id: id.pracA, timeZone: "UTC", slotMinutes: 30 }])).get(id.pracA)!;
+    session.viewer = as.staffX();
+    const found = await lookupPatient({}, form({ name: "p one", dob: "1990-01-01" }));
+    expect(found.matches?.map((m) => m.id)).toEqual([id.p1]);
+
+    const where = await attempt("staffX", () => bookForPatient(slot.id, {}, form({ mode: "existing", patientId: id.p1, name: "P One", dob: "1990-01-01", reason: "Checkup" })));
+    expect(where).toMatch(/^\/appointments\/[0-9a-f-]+\?notice=booked_for$/);
+    const [booked] = await db.select().from(schema.appointments).where(eq(schema.appointments.startsAt, slot.start));
+    expect(booked).toMatchObject({ patientId: id.p1, status: "confirmed", bookedBy: "staff" });
+    expect(await actions()).toEqual(["patient.lookup", "appointment.book"]);
+  });
+
+  it("staff can add a new patient and book them", async () => {
+    const [slot] = (await openSlotsFor([{ id: id.pracA, timeZone: "UTC", slotMinutes: 30 }])).get(id.pracA)!;
+    const where = await attempt("staffX", () =>
+      bookForPatient(slot.id, {}, form({ mode: "new", name: "Brand New", dob: "1985-05-05", phone: "555-0150", reason: "First visit" })),
+    );
+    expect(where).toMatch(/notice=booked_for$/);
+    const [created] = await db.select().from(schema.patients).where(eq(schema.patients.name, "Brand New"));
+    expect(created).toMatchObject({ userId: null, dob: "1985-05-05" });
+    expect(await actions()).toEqual(["patient.create", "appointment.book"]);
   });
 });

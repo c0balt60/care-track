@@ -20,6 +20,7 @@ const notices: Record<string, string> = {
   withdrawn: "Request withdrawn.",
   moved: "Your appointment has been moved.",
   move_requested: "Request sent. You keep your current time until it's accepted.",
+  booked_for: "Booked and confirmed. If the patient has an account, they'll get a confirmation email.",
 };
 
 export default async function AppointmentDetail({ params, searchParams }: PageProps<"/appointments/[id]">) {

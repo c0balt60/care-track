@@ -26,7 +26,9 @@ The last group of tests is **positive controls**: the right person *can* do each
 | See an appointment | their own | their own | their clinic's practitioners' | none |
 | Approve or decline a request | no | their own | their clinic's | no |
 | Cancel | their own | their own | their clinic's | no |
-| Book or reschedule | for themselves | no | no (front desk is SCH-6 #24) | no |
+| Book | for themselves | no | for a patient, with their clinic's practitioners (SCH-6 #24) | no |
+| Reschedule | their own | no | no | no |
+| Look up a patient | no | no | exact full name + date of birth only (SCH-6 #24) | no |
 | Edit availability | no | their own | no | no |
 | Edit the clinic, remove a practitioner from it | no | no | their own clinic | no |
 | Edit patient details | their own | no | no | no |
@@ -47,7 +49,11 @@ The appointment rules live in one pure function, `involves()` and `can()` in [`l
 | B, Y-staff or admin open A's appointment page | `null`, so the page 404s | `loadAppointmentFor` checks `involves()` |
 | Y-staff list X's practitioner's appointments with `?practitioner=` | Empty | `listAppointmentsFor` puts the party check in the SQL `WHERE`, so a filter can only narrow it |
 | P2 books a slot and passes P1's appointment as `rescheduleFromId` | Refused (`reschedule`) | `checkReschedule` requires the old appointment to be the patient's own |
-| Staff, practitioner or admin book | Refused | Only patients can book (front-desk booking isn't built yet) |
+| Staff, practitioner or admin use the patient booking action | Refused | It books only for the signed-in patient |
+| Y-staff book for X's practitioner | Refused (`clinic`) | `bookSlot` checks the practitioner is at the staff member's clinic, from the session |
+| Staff send another patient's id with the looked-up name and date of birth | Refused | `patientMatching` requires the id, name and date of birth to all match the same patient |
+| Y-staff add a new patient and book X's practitioner | Refused, and no patient is created | Creating and booking share one transaction |
+| Patient, practitioner or admin look up or book for a patient | Refused | Both staff actions call `getViewerAs("staff")` first |
 | B removes A's availability exception | Nothing removed | The `DELETE` is scoped to the session's practitioner id |
 | Y-staff remove X's practitioner | Refused (`not-on-team`) | The `UPDATE` requires the practitioner to be on the staff member's clinic |
 | Y-staff edit their clinic with `clinicId` set to X in the form | Only Y changes | The clinic comes from the session; form ids are ignored |
@@ -87,6 +93,8 @@ All three are now in `disabledPaths` and return 404. If settings later offers "c
 Tested in `lib/better-auth.test.ts`: "blocks the account endpoints the app doesn't use".
 
 ## By design, not findings
+
+- **Staff can look up any patient, but only by exact full name and date of birth** (SCH-6 #24). Patients aren't tied to one clinic, so this is how a returning patient is found without a duplicate record. Nothing partial comes back, so the list can't be browsed. A match shows only the last 4 phone digits, every patient shown is audited (`patient.lookup`), and lookups are capped at 30 per 15 minutes per staff member, so dates of birth can't be guessed one by one. See [`lib/patient-lookup.ts`](../lib/patient-lookup.ts).
 
 - **Unverified practitioners can be opened and booked by direct link.** ADM-2 hides them from listings only; that was a deliberate choice.
 - **Anyone can sign up as a practitioner or staff member, but it grants nothing.** Those accounts have no practitioner or clinic row until one is linked, and `getViewerAs` treats a role without its row as signed out.
