@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { isId } from "@/lib/validation";
 import { notFound } from "next/navigation";
 import { MapPinIcon } from "@/components/icons";
 import { PractitionerCard } from "@/components/practitioner-card";
@@ -6,11 +7,10 @@ import { db } from "@/lib/db";
 import { clinics } from "@/lib/db/schema";
 import { searchPractitioners } from "@/lib/practitioner-search";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function ClinicProfile({ params }: PageProps<"/clinics/[id]">) {
   const { id } = await params;
-  if (!UUID.test(id)) notFound(); // Postgres throws on a malformed uuid
+  if (!isId(id)) notFound(); // Postgres throws on a malformed uuid
   const [clinic] = await db.select().from(clinics).where(eq(clinics.id, id)).limit(1);
   if (!clinic) notFound();
 

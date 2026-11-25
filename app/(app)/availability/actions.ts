@@ -128,8 +128,8 @@ export async function removeException(formData: FormData) {
   const viewer = await getViewerAs("practitioner");
   if (!viewer) redirect("/availability?error=no-practitioner");
 
-  const date = String(formData.get("date") ?? "");
-  if (!isDayKey(date)) redirect("/availability?error=bad-date");
+  const date = formData.get("date");
+  if (typeof date !== "string" || !isDayKey(date)) redirect("/availability?error=bad-date");
 
   await db.transaction(async (tx) => {
     // The practitioner id comes from the session, so one practitioner can't delete another's.

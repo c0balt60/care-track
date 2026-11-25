@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { clinics, practitioners } from "@/lib/db/schema";
 import { parseClinicProfile } from "@/lib/clinic-profile";
+import { isId } from "@/lib/validation";
 import { getCurrentClinic } from "./current-clinic";
 
 /** Saves the staff member's clinic profile from the /clinic form. */
@@ -30,13 +31,13 @@ export async function removePractitioner(formData: FormData) {
   if (!clinic) redirect("/clinic?error=no-clinic");
 
   // The id comes from the form, so the WHERE also requires the practitioner to be on this clinic.
-  const id = String(formData.get("practitionerId") ?? "");
+  const id = formData.get("practitionerId");
+  if (!isId(id)) redirect("/clinic?error=not-on-team");
   const removed = await db
     .update(practitioners)
     .set({ clinicId: null })
     .where(and(eq(practitioners.id, id), eq(practitioners.clinicId, clinic.id)))
-    .returning({ id: practitioners.id })
-    .catch(() => []); // a malformed uuid makes Postgres throw; treat it like "not found"
+    .returning({ id: practitioners.id });
   if (!removed.length) redirect("/clinic?error=not-on-team");
 
   revalidatePath("/clinic");
