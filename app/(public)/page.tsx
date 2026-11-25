@@ -33,19 +33,19 @@ export default async function Home() {
             <form action="/search" className="card mt-8 grid gap-3 p-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
               <div>
                 <label htmlFor="service" className="label">Service or specialty</label>
-                <input id="service" name="service" list="services" className="input" placeholder="e.g. Dermatology" />
+                <select id="service" name="service" className="input">
+                  <option value="">All services</option>
+                  {services.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
               </div>
               <div>
                 <label htmlFor="near" className="label">Near</label>
-                <input id="near" name="near" className="input" placeholder="City or ZIP" defaultValue="Troy, NY" />
+                <input id="near" name="near" className="input" placeholder="City or postal code" defaultValue="Toronto, ON" />
               </div>
               <button className="btn btn-primary">
                 <SearchIcon /> Find openings
               </button>
             </form>
-            <datalist id="services">
-              {services.map((s) => <option key={s} value={s} />)}
-            </datalist>
 
             <p className="mt-4 text-sm text-muted">
               Popular:{" "}

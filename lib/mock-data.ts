@@ -81,17 +81,17 @@ export function demoViewer<R extends Role>(viewer: { role: R; name: string }): E
   return demo as Extract<DemoViewer, { role: R }>;
 }
 
-const TZ = "America/New_York";
+const TZ = "America/Toronto";
 
 export const clinics: Clinic[] = [
   {
     id: "northside",
     name: "Northside Clinic",
-    address: "212 River St",
-    city: "Troy, NY",
-    lat: 42.7335,
-    lng: -73.688,
-    phone: "(518) 555-0142",
+    address: "220 King St W",
+    city: "Toronto, ON",
+    lat: 43.6532,
+    lng: -79.3832,
+    phone: "(416) 555-0142",
     services: ["Dermatology", "Family medicine", "Physical therapy"],
     timeZone: TZ,
   },
@@ -108,7 +108,7 @@ export const practitioners: Practitioner[] = [
     services: ["Skin checks", "Acne", "Rashes and eczema", "Mole removal"],
     bio: "Board-certified dermatologist with 12 years of practice. Sees adults and teens for everyday skin concerns and yearly skin checks.",
     clinicId: "northside",
-    city: "Troy, NY",
+    city: "Toronto, ON",
     bookingMode: "approval",
     timeZone: TZ,
     slotMinutes: 30,
@@ -126,7 +126,7 @@ export const practitioners: Practitioner[] = [
     services: ["Annual physicals", "Sick visits", "Vaccines", "Chronic care"],
     bio: "Family doctor for all ages. Same-week sick visits are usually available.",
     clinicId: "northside",
-    city: "Troy, NY",
+    city: "Toronto, ON",
     bookingMode: "instant",
     timeZone: TZ,
     slotMinutes: 20,
@@ -141,7 +141,7 @@ export const practitioners: Practitioner[] = [
     services: ["Back and neck pain", "Sports injuries", "Post-surgery rehab"],
     bio: "Physical therapist focused on getting runners and weekend athletes back to what they love.",
     clinicId: "northside",
-    city: "Troy, NY",
+    city: "Toronto, ON",
     bookingMode: "instant",
     timeZone: TZ,
     slotMinutes: 45,
@@ -156,9 +156,9 @@ export const practitioners: Practitioner[] = [
     services: ["Knee and hip pain", "Fractures", "Joint injections"],
     bio: "Orthopedic surgeon in solo practice. Reviews each request to make sure a visit is the right next step.",
     clinicId: null,
-    city: "Albany, NY",
-    lat: 42.6526,
-    lng: -73.7562,
+    city: "North York, ON",
+    lat: 43.7615,
+    lng: -79.4111,
     bookingMode: "approval",
     timeZone: TZ,
     slotMinutes: 30,
@@ -173,9 +173,9 @@ export const practitioners: Practitioner[] = [
     services: ["Well-child visits", "Sick visits", "Vaccines"],
     bio: "Pediatrician for newborns through age 18. Saturday mornings available.",
     clinicId: null,
-    city: "Cohoes, NY",
-    lat: 42.7743,
-    lng: -73.7001,
+    city: "Mississauga, ON",
+    lat: 43.5890,
+    lng: -79.6441,
     bookingMode: "instant",
     timeZone: TZ,
     slotMinutes: 30,
@@ -188,12 +188,12 @@ export const practitioners: Practitioner[] = [
 export const services = [...new Set(practitioners.flatMap((p) => [p.specialty, ...p.services]))].sort();
 
 export const patients: Patient[] = [
-  { id: "jordan", name: "Jordan Lee", dob: "1990-04-12", phone: "(518) 555-0110", hasAccount: true },
-  { id: "jamie", name: "Jamie Doe", dob: "1985-09-30", phone: "(518) 555-0123", hasAccount: true },
-  { id: "alex", name: "Alex Smith", dob: "1978-01-17", phone: "(518) 555-0187", hasAccount: true },
-  { id: "bo", name: "Bo Chen", dob: "2001-06-05", phone: "(518) 555-0164", hasAccount: true },
-  { id: "carmen", name: "Carmen Diaz", dob: "1995-11-21", phone: "(518) 555-0139", hasAccount: true },
-  { id: "riley", name: "Riley Brooks", dob: "1962-03-08", phone: "(518) 555-0171", hasAccount: false },
+  { id: "jordan", name: "Jordan Lee", dob: "1990-04-12", phone: "(416) 555-0110", hasAccount: true },
+  { id: "jamie", name: "Jamie Doe", dob: "1985-09-30", phone: "(416) 555-0123", hasAccount: true },
+  { id: "alex", name: "Alex Smith", dob: "1978-01-17", phone: "(416) 555-0187", hasAccount: true },
+  { id: "bo", name: "Bo Chen", dob: "2001-06-05", phone: "(416) 555-0164", hasAccount: true },
+  { id: "carmen", name: "Carmen Diaz", dob: "1995-11-21", phone: "(416) 555-0139", hasAccount: true },
+  { id: "riley", name: "Riley Brooks", dob: "1962-03-08", phone: "(416) 555-0171", hasAccount: false },
 ];
 
 /** Practitioners invited to a clinic who haven't joined yet. */

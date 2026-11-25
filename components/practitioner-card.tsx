@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { dayKey, formatDay, formatTime, formatWhen } from "@/lib/dates";
+import { travelMinutes } from "@/lib/geo";
 import type { SearchResult } from "@/lib/practitioner-search";
 import { MapPinIcon } from "./icons";
 import { Avatar } from "./ui";
@@ -10,7 +11,7 @@ import { Avatar } from "./ui";
  * any ?from= day filter), so this component does no data loading of its own.
  */
 export function PractitionerCard({ result }: { result: SearchResult }) {
-  const { practitioner: p, clinic, slots } = result;
+  const { practitioner: p, clinic, slots, km } = result;
   const tz = p.timeZone;
   const first = slots[0];
   const firstDay = first ? dayKey(first.start, tz) : null;
@@ -37,6 +38,11 @@ export function PractitionerCard({ result }: { result: SearchResult }) {
             <MapPinIcon width={16} height={16} />
             {clinic ? `${clinic.name} · ${clinic.city}` : p.city}
           </p>
+          {km != null && (
+            <p className="text-sm text-muted">
+              {km < 10 ? km.toFixed(1) : Math.round(km)} km away · about {travelMinutes(km)} min drive (estimate)
+            </p>
+          )}
         </div>
       </div>
 

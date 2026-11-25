@@ -8,7 +8,7 @@ describe("practitionerLocation", () => {
 
   it("uses the clinic's coordinates over the practitioner's own", () => {
     const p = practitioners.find((x) => x.clinicId === "northside")!;
-    expect(practitionerLocation({ ...p, lat: 0, lng: 0 })).toEqual({ lat: 42.7335, lng: -73.688 });
+    expect(practitionerLocation({ ...p, lat: 0, lng: 0 })).toEqual({ lat: 43.6532, lng: -79.3832 });
   });
 
   it("returns null for a solo practitioner without coordinates", () => {
