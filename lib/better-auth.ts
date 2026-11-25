@@ -9,6 +9,7 @@ import { nextCookies } from "better-auth/next-js";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { db } from "./db";
 import * as schema from "./db/schema";
+import { isPublicSecretOnDeployment } from "./public-secret";
 import { eq } from "drizzle-orm";
 import { APIError } from "better-auth/api";
 
@@ -18,6 +19,12 @@ import { APIError } from "better-auth/api";
 // would trust every other Vercel site too. Elsewhere these are unset and BETTER_AUTH_URL wins.
 const { VERCEL_ENV, VERCEL_URL, VERCEL_BRANCH_URL } = process.env;
 const isPreview = VERCEL_ENV === "preview";
+
+// The secret in .env.example is public; with it, anyone could forge a session cookie.
+// Refuse to start a Vercel deployment that copied it (lib/public-secret.ts).
+if (isPublicSecretOnDeployment(process.env.BETTER_AUTH_SECRET)) {
+  throw new Error("BETTER_AUTH_SECRET is the public value from .env.example. Set your own in Vercel: openssl rand -base64 32");
+}
 
 export const auth = betterAuth({
   // BETTER_AUTH_SECRET (signs cookies) is read from the environment; so is BETTER_AUTH_URL
