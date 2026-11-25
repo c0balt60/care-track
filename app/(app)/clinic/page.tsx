@@ -1,38 +1,30 @@
 import { eq } from "drizzle-orm";
 import Link from "next/link";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { PlusIcon } from "@/components/icons";
 import { Field, Notice, noticeText, PageHeader, param } from "@/components/ui";
 import { requireRole } from "@/lib/auth";
 import { clinicProfileErrors } from "@/lib/clinic-profile";
 import { db } from "@/lib/db";
 import { practitioners } from "@/lib/db/schema";
-import { demoViewer, invites } from "@/lib/mock-data";
 import { removePractitioner, updateClinicProfile } from "./actions";
 import { getCurrentClinic } from "./current-clinic";
 
 const pill = "inline-flex rounded-full px-2.5 py-0.5 text-sm font-medium";
 
 export default async function ClinicSettings({ searchParams }: PageProps<"/clinic">) {
-  const viewer = await requireRole("staff");
+  await requireRole("staff");
   const sp = await searchParams;
 
   const clinic = await getCurrentClinic();
   if (!clinic) return <p role="alert" className="card p-5">{clinicProfileErrors["no-clinic"]}</p>;
 
   const team = await db
-    .select({ id: practitioners.id, name: practitioners.name, specialty: practitioners.specialty })
+    .select({ id: practitioners.id, name: practitioners.name, specialty: practitioners.specialty, verifiedAt: practitioners.verifiedAt })
     .from(practitioners)
     .where(eq(practitioners.clinicId, clinic.id))
     .orderBy(practitioners.name);
-  // ponytail: TEMPORARY. Invites have no table yet (no email service), so they stay mock data.
-  // Prototype: invites are still mock data, keyed by the demo clinic id.
-  const invited = invites.filter((i) => i.clinicId === demoViewer(viewer).clinicId);
   const error = noticeText(clinicProfileErrors, param(sp.error));
-  const notice = noticeText(
-    { saved: "Clinic profile saved.", invited: "Invite sent.", removed: "Practitioner removed." },
-    param(sp.notice),
-  );
+  const notice = noticeText({ saved: "Clinic profile saved.", removed: "Practitioner removed." }, param(sp.notice));
 
   return (
     <>
@@ -61,21 +53,8 @@ export default async function ClinicSettings({ searchParams }: PageProps<"/clini
       </section>
 
       <section aria-labelledby="team" className="card mt-6 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 id="team" className="text-lg font-semibold">Practitioners</h2>
-          <ConfirmDialog
-            id="invite"
-            trigger={<><PlusIcon /> Invite practitioner</>}
-            title="Invite a practitioner"
-            text={`They’ll get an email to join ${clinic.name}. They keep control of their own schedule.`}
-            confirm="Send invite"
-            cancel="Cancel"
-            action="/clinic?notice=invited"
-            method="post"
-          >
-            <Field label="Email" id="email" type="email" required />
-          </ConfirmDialog>
-        </div>
+        <h2 id="team" className="text-lg font-semibold">Practitioners</h2>
+        <p className="text-sm text-muted">Only verified practitioners appear on your public page and in search. An admin verifies them.</p>
 
         <table className="mt-4 w-full text-left">
           <thead className="text-sm text-muted">
@@ -91,7 +70,11 @@ export default async function ClinicSettings({ searchParams }: PageProps<"/clini
               <tr key={p.id}>
                 <td className="py-3 pr-2"><Link href={`/practitioners/${p.id}`} className="link">{p.name}</Link></td>
                 <td className="hidden py-3 pr-2 sm:table-cell">{p.specialty}</td>
-                <td className="py-3 pr-2"><span className={`${pill} bg-green-50 text-green-800`}>Active</span></td>
+                <td className="py-3 pr-2">
+                  {p.verifiedAt
+                    ? <span className={`${pill} bg-green-50 text-green-800`}>Verified</span>
+                    : <span className={`${pill} bg-amber-50 text-amber-800`}>Awaiting verification</span>}
+                </td>
                 <td className="py-3 text-right">
                   <ConfirmDialog
                     id={`remove-${p.id}`}
@@ -104,14 +87,6 @@ export default async function ClinicSettings({ searchParams }: PageProps<"/clini
                     hidden={{ practitionerId: p.id }}
                   />
                 </td>
-              </tr>
-            ))}
-            {invited.map((i) => (
-              <tr key={i.email}>
-                <td className="py-3 pr-2">{i.name}<span className="block text-sm text-muted">{i.email}</span></td>
-                <td className="hidden py-3 pr-2 text-muted sm:table-cell">Not joined yet</td>
-                <td className="py-3 pr-2"><span className={`${pill} bg-amber-50 text-amber-800`}>Invited</span></td>
-                <td className="py-3 text-right" />
               </tr>
             ))}
           </tbody>

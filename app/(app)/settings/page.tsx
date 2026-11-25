@@ -1,24 +1,21 @@
 import Link from "next/link";
 import { Field, Notice, noticeText, PageHeader, param } from "@/components/ui";
-import { demoViewer, getPractitioner } from "@/lib/mock-data";
+import { requireRole } from "@/lib/auth";
 import { patientDetailErrors } from "@/lib/patient-details";
 import { practitionerProfileErrors } from "@/lib/practitioner-profile";
 import { updatePatientDetails, updatePractitionerProfile } from "./actions";
 import { getCurrentPatient } from "./current-patient";
 import { getCurrentPractitioner } from "./current-practitioner";
-import { requireRole } from "@/lib/auth";
 
+// Every field here saves. Patients edit their details, practitioners their public profile.
+// Changing email or password isn't built yet, so the account card is read-only rather than
+// showing boxes that would silently do nothing.
 export default async function Settings({ searchParams }: PageProps<"/settings">) {
   const viewer = await requireRole("patient", "practitioner", "staff");
   const sp = await searchParams;
 
   const patient = viewer.role === "patient" ? await getCurrentPatient() : null;
-  // Prototype: the photo and public-profile link still come from the demo practitioner.
-  const demo = demoViewer(viewer);
-  const p = demo.role === "practitioner" ? getPractitioner(demo.practitionerId) : undefined;
-  const profile = p ? await getCurrentPractitioner() : null;
-  const action = patient ? updatePatientDetails : profile ? updatePractitionerProfile : null;
-  const email = viewer.email;
+  const profile = viewer.role === "practitioner" ? await getCurrentPractitioner() : null;
   const notice = noticeText({ saved: "Changes saved." }, param(sp.notice));
   const error = noticeText({ ...patientDetailErrors, ...practitionerProfileErrors }, param(sp.error));
 
@@ -26,49 +23,63 @@ export default async function Settings({ searchParams }: PageProps<"/settings">)
     <>
       <PageHeader
         title="Settings"
-        actions={p && <Link href={`/practitioners/${p.id}`} className="btn btn-secondary">View public profile</Link>}
+        actions={profile && <Link href={`/practitioners/${profile.id}`} className="btn btn-secondary">View public profile</Link>}
       />
       {notice && <Notice>{notice}</Notice>}
       {error && <p role="alert" className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-800">{error}</p>}
 
-      {/* Patients save name, DOB, and phone; practitioners save their public profile. The rest is still prototype: posts back here. */}
-      <form {...(action ? { action } : { method: "post", action: "/settings?notice=saved" })} className="space-y-6">
-        <section aria-labelledby="account" className="card p-5">
-          <h2 id="account" className="text-lg font-semibold">Account</h2>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <Field label="Full name" id="name" autoComplete="name" defaultValue={patient?.name ?? viewer.name} required />
-            <Field label="Email" id="email" type="email" autoComplete="email" defaultValue={email} required />
-            {patient && (
-              <>
-                <Field label="Date of birth" id="dob" type="date" autoComplete="bday" defaultValue={patient.dob ?? ""} required />
-                <Field label="Phone" id="phone" type="tel" autoComplete="tel" defaultValue={patient.phone ?? ""} required />
-              </>
-            )}
-            <Field label="New password" id="password" type="password" autoComplete="new-password" minLength={8} hint="Leave blank to keep your current password." />
-          </div>
-        </section>
-
-        {p && (
-          <section aria-labelledby="public" className="card p-5">
-            <h2 id="public" className="text-lg font-semibold">Public profile</h2>
-            <p className="text-sm text-muted">Patients see this on your profile and in search results.</p>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <Field label="Photo" id="photo" type="file" accept="image/*" className="input file:mr-3 file:rounded-md file:border-0 file:bg-sand file:px-3 file:py-1" />
-              <Field label="Credentials" id="credentials" defaultValue={profile?.credentials ?? p.credentials} required />
-              <Field label="Specialty" id="specialty" defaultValue={profile?.specialty ?? p.specialty} required />
-              <Field label="Services" id="services" defaultValue={(profile?.services ?? p.services).join(", ")} hint="Separate with commas." />
-              <div className="sm:col-span-2">
-                <label htmlFor="bio" className="label">Bio</label>
-                <textarea id="bio" name="bio" rows={4} defaultValue={profile?.bio ?? p.bio} className="input" />
-              </div>
+      <section aria-labelledby="account" className="card p-5">
+        <h2 id="account" className="text-lg font-semibold">Account</h2>
+        <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+          {!patient && (
+            <div>
+              <dt className="label">Name</dt>
+              <dd>{viewer.name}</dd>
             </div>
-          </section>
-        )}
+          )}
+          <div>
+            <dt className="label">Email</dt>
+            <dd>{viewer.email}</dd>
+          </div>
+        </dl>
+        <p className="mt-4 text-sm text-muted">Changing your email or password isn&rsquo;t available yet.</p>
+      </section>
 
-        <div className="flex justify-end">
-          <button className="btn btn-primary">Save changes</button>
-        </div>
-      </form>
+      {patient && (
+        <form action={updatePatientDetails} aria-labelledby="details" className="card mt-6 p-5">
+          <h2 id="details" className="text-lg font-semibold">Your details</h2>
+          <p className="text-sm text-muted">Your clinic sees these when you book.</p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <Field label="Full name" id="name" autoComplete="name" defaultValue={patient.name} required />
+            <Field label="Date of birth" id="dob" type="date" autoComplete="bday" defaultValue={patient.dob ?? ""} required />
+            <Field label="Phone" id="phone" type="tel" autoComplete="tel" defaultValue={patient.phone ?? ""} required />
+          </div>
+          <div className="mt-6 flex justify-end">
+            <button className="btn btn-primary">Save changes</button>
+          </div>
+        </form>
+      )}
+
+      {profile && (
+        <form action={updatePractitionerProfile} aria-labelledby="public" className="card mt-6 p-5">
+          <h2 id="public" className="text-lg font-semibold">Public profile</h2>
+          <p className="text-sm text-muted">Patients see this on your profile and in search results.</p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <Field label="Credentials" id="credentials" defaultValue={profile.credentials} required />
+            <Field label="Specialty" id="specialty" defaultValue={profile.specialty} required />
+            <div className="sm:col-span-2">
+              <Field label="Services" id="services" defaultValue={profile.services.join(", ")} hint="Separate with commas." />
+            </div>
+            <div className="sm:col-span-2">
+              <label htmlFor="bio" className="label">Bio</label>
+              <textarea id="bio" name="bio" rows={4} defaultValue={profile.bio} className="input" />
+            </div>
+          </div>
+          <div className="mt-6 flex justify-end">
+            <button className="btn btn-primary">Save changes</button>
+          </div>
+        </form>
+      )}
     </>
   );
 }

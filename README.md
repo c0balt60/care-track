@@ -16,6 +16,16 @@ The core idea:
 - Patients browse that availability and sign up for an appointment.
 - Both sides use a dashboard to keep track of upcoming appointments.
 
+## Fake data only
+
+Care Track is a demo, not a medical service. It handles the kind of data real clinics protect, so we treat it with the same care, but it must only ever hold made-up data:
+
+- **Never enter real health information**, real patients' names, or real contact details. Every page shows a banner saying so.
+- The seed data (`pnpm db:seed`, from [`lib/db/seed-data.ts`](lib/db/seed-data.ts)) is invented. Phone numbers use the fictional 555 range and logins use `@caretrack.test`.
+- **Payments run in Stripe test mode only.** Use Stripe's [test card numbers](https://docs.stripe.com/testing); no real card is ever charged.
+
+How we check the app's privacy and security is in [docs/compliance-checklist.md](docs/compliance-checklist.md).
+
 ## How we use AI
 
 AI agents may write front-end code, tooling, tests, and docs, and must explain how they built it so the team understands the system. They don't write backend code. The full rules are in [AGENTS.md](AGENTS.md).

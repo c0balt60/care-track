@@ -1,8 +1,10 @@
 // Small shared pieces: Logo, PageHeader, StatusBadge, Avatar, EmptyState, Notice.
 import Link from "next/link";
 import type { InputHTMLAttributes, ReactNode } from "react";
-import type { Status } from "@/lib/mock-data";
+import type { APPOINTMENT_STATUSES } from "@/lib/db/schema";
 import { CalendarCheckIcon, CheckIcon } from "./icons";
+
+type Status = (typeof APPOINTMENT_STATUSES)[number];
 
 export function Logo({ href = "/" }: { href?: string }) {
   return (

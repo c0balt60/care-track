@@ -26,7 +26,7 @@ const updatedAt = () =>
     .defaultNow()
     .$onUpdate(() => new Date());
 
-//Keep these in sync with the types in lib/mock-data.ts
+// The allowed values for text columns. Check constraints below enforce them in the database too.
 export const ROLES = ["patient", "practitioner", "staff"] as const;
 export const USER_ROLES = [...ROLES, "admin"] as const;
 export const APPOINTMENT_STATUSES = ["pending", "confirmed", "declined", "cancelled", "completed"] as const;
