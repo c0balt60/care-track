@@ -23,6 +23,16 @@ if (process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "product
   console.error("Refusing to seed: this wipes every table and must never run against production.");
   process.exit(1);
 }
+// The check above can't see a laptop whose .env points at a shared database. Wiping
+// anything but a local one needs its host typed back, so it's never an accident (CMP-3 #41).
+const host = new URL(url).hostname;
+if (!["localhost", "127.0.0.1", "::1"].includes(host) && process.env.SEED_CONFIRM_HOST !== host) {
+  console.error(
+    `Refusing to seed ${host}: this wipes every table there.\n` +
+      `If it really is a throwaway database (like the Neon preview branch), run again with SEED_CONFIRM_HOST=${host}`,
+  );
+  process.exit(1);
+}
  
 const DAY = 24 * 60 * 60 * 1000;
  

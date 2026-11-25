@@ -56,6 +56,7 @@ So a failed sign-up would have logged the new patient's name, date of birth and 
 | App to email: TLS | Pass | Production sends through Resend's HTTPS API (`fetch("https://api.resend.com/...")` in [`lib/email.ts`](../lib/email.ts)); SMTP is only for Mailpit on localhost |
 | Database at rest | Pass (platform default) | Neon encrypts stored data by default. Manual check 2. |
 | No other place stores PHI | Pass | No file uploads (the unused photo field was removed in CMP-4); no client-side storage of patient data |
+| The rate limiter doesn't keep a readable list of emails and IPs | **Fixed** (CMP-3) | Keys like `login:email:<address>` are stored as SHA-256 hashes (`storedKey` in [`lib/rate-limit.ts`](../lib/rate-limit.ts)); test "stores keys hashed" in [`lib/rate-limit.test.ts`](../lib/rate-limit.test.ts) |
 
 ## 5. Data retention and account deletion
 

@@ -4,7 +4,7 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { db } from "./db";
 import * as schema from "./db/schema";
-import { clientIp, pruneRateLimits, rateLimit, tooManyAttempts } from "./rate-limit";
+import { clientIp, pruneRateLimits, rateLimit, storedKey, tooManyAttempts } from "./rate-limit";
 
 vi.mock("server-only", () => ({}));
 vi.mock("./db", async () => {
@@ -50,8 +50,17 @@ it("pruneRateLimits() deletes only day-old counters", async () => {
   await rateLimit("fresh", rule, NOW);
   await pruneRateLimits(NOW);
   const keys = (await db.select().from(schema.rateLimits)).map((r) => r.key);
-  expect(keys).not.toContain("old");
-  expect(keys).toContain("fresh");
+  expect(keys).not.toContain(storedKey("old"));
+  expect(keys).toContain(storedKey("fresh"));
+});
+
+it("stores keys hashed, so the table holds no emails or IP addresses", async () => {
+  await rateLimit("login:email:jordan@example.com", rule, NOW);
+  await rateLimit("login:ip:203.0.113.7", rule, NOW);
+  const stored = JSON.stringify(await db.select().from(schema.rateLimits));
+  expect(stored).not.toContain("jordan@example.com");
+  expect(stored).not.toContain("203.0.113.7");
+  expect(stored).toContain(storedKey("login:email:jordan@example.com"));
 });
 
 it("clientIp() takes the first forwarded address", () => {

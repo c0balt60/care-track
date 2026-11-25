@@ -7,9 +7,17 @@ import "server-only";
 //
 // Server actions can't answer with HTTP 429 in a way the form can show, so callers turn a
 // refusal into a form error. Better Auth's own limiter covers the /api/auth/* HTTP routes.
+import { createHash } from "node:crypto";
 import { lt, sql } from "drizzle-orm";
 import { db } from "./db";
 import { rateLimits } from "./db/schema";
+
+/**
+ * The key as stored: a SHA-256 hash. Keys hold emails and IP addresses ("login:email:jo@x.com"),
+ * including emails typed by people who have no account, so the table keeps no readable copy
+ * (CMP-3 #41). Counting doesn't need the original: the same key always hashes the same.
+ */
+export const storedKey = (key: string) => createHash("sha256").update(key).digest("base64url");
 
 /** The limits in one place, so they're easy to review and tune. */
 export const LIMITS = {
@@ -37,7 +45,7 @@ export async function rateLimit(
 
   const [row] = await db
     .insert(rateLimits)
-    .values({ key, windowStart: now, count: 1 })
+    .values({ key: storedKey(key), windowStart: now, count: 1 })
     .onConflictDoUpdate({
       target: rateLimits.key,
       // Both expressions read the row as it was before this update.

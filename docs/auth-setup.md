@@ -114,8 +114,13 @@ previews share the branch:
 To get test accounts there, seed it (only the preview branch, never production):
 
 ```bash
-DATABASE_URL_UNPOOLED="<preview direct url>" pnpm db:seed
+SEED_CONFIRM_HOST="<preview host>" DATABASE_URL_UNPOOLED="<preview direct url>" pnpm db:seed
 ```
+
+`SEED_CONFIRM_HOST` is the host part of that URL (`ep-...neon.tech`). The seed refuses any
+database that isn't on localhost unless you type its host back, so a `.env` pointing at
+the wrong database can't wipe it by accident. Run it once without the variable and it
+prints the host it would wipe.
 
 Never run `pnpm db:seed` against production. It wipes the database, and it refuses to
 run when `NODE_ENV` or `VERCEL_ENV` is `production`.
