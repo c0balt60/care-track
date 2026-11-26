@@ -33,6 +33,7 @@ The last group of tests is **positive controls**: the right person *can* do each
 | Edit the clinic, remove a practitioner from it | no | no | their own clinic | no |
 | Edit patient details | their own | no | no | no |
 | Change roles, disable accounts, verify practitioners | no | no | no | yes |
+| Delete an account (#78) | their own, with their password | no | no | any, except their own or the last active admin |
 
 The appointment rules live in one pure function, `involves()` and `can()` in [`lib/appointment-rules.ts`](../lib/appointment-rules.ts). Pages and actions both use it, so a hidden button and a refused action can't disagree.
 
@@ -54,6 +55,9 @@ The appointment rules live in one pure function, `involves()` and `can()` in [`l
 | Staff send another patient's id with the looked-up name and date of birth | Refused | `patientMatching` requires the id, name and date of birth to all match the same patient |
 | Y-staff add a new patient and book X's practitioner | Refused, and no patient is created | Creating and booking share one transaction |
 | Patient, practitioner or admin look up or book for a patient | Refused | Both staff actions call `getViewerAs("staff")` first |
+| P1 deletes their account with P2's `userId` in the form | Only ever their own; with a wrong password, nothing | `deleteMyAccount` takes the user from the session and checks the password against their hash |
+| Staff, practitioner or admin use the patient's "delete my account" | Refused | It only accepts a signed-in patient |
+| A patient, practitioner or staff member calls the admin delete | Sent to login, nothing changed | `deleteAccount` calls `getViewerAs("admin")` first |
 | B removes A's availability exception | Nothing removed | The `DELETE` is scoped to the session's practitioner id |
 | Y-staff remove X's practitioner | Refused (`not-on-team`) | The `UPDATE` requires the practitioner to be on the staff member's clinic |
 | Y-staff edit their clinic with `clinicId` set to X in the form | Only Y changes | The clinic comes from the session; form ids are ignored |

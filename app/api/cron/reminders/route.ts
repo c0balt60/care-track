@@ -2,6 +2,7 @@ import { sendDueReminders } from "@/lib/appointment-reminders";
 import { isCronAuthorized } from "@/lib/cron-auth";
 import { requestLogger } from "@/lib/logger";
 import { pruneRateLimits } from "@/lib/rate-limit";
+import { purgeExpiredData } from "@/lib/retention";
 
 // Called by Vercel Cron (see vercel.json). Safe to call repeatedly: each reminder is
 // claimed before it's sent, so a second call sends nothing new.
@@ -15,8 +16,10 @@ export async function GET(request: Request) {
   }
 
   const result = await sendDueReminders();
-  // Piggybacks on the daily cron (Vercel Hobby allows few) so rate_limits doesn't grow forever.
+  // Housekeeping piggybacks on the daily cron (Vercel Hobby allows few): rate_limits doesn't
+  // grow forever, and data past its retention period is deleted (#78, lib/retention.ts).
   await pruneRateLimits();
-  log.info(result, "reminder cron finished");
-  return Response.json(result); // counts only: no names, no addresses
+  const purged = await purgeExpiredData();
+  log.info({ ...result, purged }, "reminder cron finished");
+  return Response.json({ ...result, purged }); // counts only: no names, no addresses
 }

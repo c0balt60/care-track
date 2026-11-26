@@ -2,10 +2,14 @@
 
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { deleteOwnAccount } from "@/lib/account-deletion";
 import { audit, diffOf, redactedDiff } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { getViewerAs } from "@/lib/auth";
+import { auth } from "@/lib/better-auth";
+import { clientIp, LIMITS, rateLimit } from "@/lib/rate-limit";
 import { patients, practitioners, users } from "@/lib/db/schema";
 import { parsePatientDetails } from "@/lib/patient-details";
 import { parsePractitionerProfile } from "@/lib/practitioner-profile";
@@ -62,4 +66,34 @@ export async function updatePractitionerProfile(formData: FormData) {
   revalidatePath("/settings");
   revalidatePath("/practitioners/[id]", "page");
   redirect("/settings?notice=saved");
+}
+/**
+ * Deletes the signed-in patient's own account (#78): cancels their upcoming appointments,
+ * anonymizes their patient record and deletes the login. See lib/account-deletion.ts.
+ * Patients only; admins delete other accounts from /admin.
+ */
+export async function deleteMyAccount(formData: FormData) {
+  // Who is deleted always comes from the session. The form only carries the password.
+  const viewer = await getViewerAs("patient");
+  if (!viewer) redirect("/settings?error=no-patient");
+
+  // The password check counts against the log-in limits, so it can't be used to guess passwords.
+  const h = await headers();
+  if (
+    (await rateLimit(`login:ip:${clientIp(h)}`, LIMITS.loginPerIp)) ||
+    (await rateLimit(`login:email:${viewer.email.toLowerCase()}`, LIMITS.loginPerEmail))
+  ) {
+    redirect("/settings?error=too-many");
+  }
+
+  const result = await deleteOwnAccount(viewer.userId, formData.get("password"));
+  if (!result.ok) redirect(`/settings?error=${result.error}`);
+
+  // The session row went with the account; this clears the now-useless cookie too.
+  try {
+    await auth.api.signOut({ headers: h });
+  } catch {
+    // Nothing to sign out of: the session is already gone.
+  }
+  redirect("/login?notice=deleted");
 }

@@ -54,7 +54,7 @@ It deliberately leaves out denial-of-service, rate-limiting and data-at-rest iss
 | Issue | From |
 |---|---|
 | Email verification at sign-up | A07 |
-| Account deletion (anonymize) and a written retention policy | CMP-2 checklist, section 5 |
+| Account deletion (anonymize) and a written retention policy: #78, done | CMP-2 checklist, section 5 |
 | Nonce-based CSP, dropping `'unsafe-inline'` scripts | A05 |
 | Practitioner invites for clinics | CMP-4 (fake invite UI removed) |
 | Change email and password in settings, as a rate-limited server action | CMP-4 (fake fields removed), CMP-1 |

@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Field, Notice, noticeText, PageHeader, param } from "@/components/ui";
+import { accountDeletionErrors } from "@/lib/account-deletion";
 import { requireRole } from "@/lib/auth";
 import { patientDetailErrors } from "@/lib/patient-details";
 import { practitionerProfileErrors } from "@/lib/practitioner-profile";
-import { updatePatientDetails, updatePractitionerProfile } from "./actions";
+import { deleteMyAccount, updatePatientDetails, updatePractitionerProfile } from "./actions";
 import { getCurrentPatient } from "./current-patient";
 import { getCurrentPractitioner } from "./current-practitioner";
 
@@ -17,7 +19,7 @@ export default async function Settings({ searchParams }: PageProps<"/settings">)
   const patient = viewer.role === "patient" ? await getCurrentPatient() : null;
   const profile = viewer.role === "practitioner" ? await getCurrentPractitioner() : null;
   const notice = noticeText({ saved: "Changes saved." }, param(sp.notice));
-  const error = noticeText({ ...patientDetailErrors, ...practitionerProfileErrors }, param(sp.error));
+  const error = noticeText({ ...patientDetailErrors, ...practitionerProfileErrors, ...accountDeletionErrors }, param(sp.error));
 
   return (
     <>
@@ -79,6 +81,35 @@ export default async function Settings({ searchParams }: PageProps<"/settings">)
             <button className="btn btn-primary">Save changes</button>
           </div>
         </form>
+      )}
+
+      {/* #78. Patients only: an admin deletes other kinds of account on request. */}
+      {patient && (
+        <section aria-labelledby="delete" className="card mt-6 border-red-200 p-5">
+          <h2 id="delete" className="text-lg font-semibold">Delete account</h2>
+          <p className="mt-1 text-muted">
+            This signs you out everywhere, cancels your upcoming appointments and removes your name, date of birth and phone.
+            Your clinic keeps the history of past visits, without your details. You can&rsquo;t undo it.
+          </p>
+          <div className="mt-4">
+            <ConfirmDialog
+              id="delete-account"
+              trigger="Delete my account"
+              triggerClassName="btn btn-danger"
+              title="Delete your account?"
+              text="Your upcoming appointments will be cancelled and you'll be signed out. Enter your password to confirm."
+              confirm="Delete my account"
+              cancel="Keep my account"
+              danger
+              action={deleteMyAccount}
+            >
+              <div>
+                <label htmlFor="delete-password" className="label">Password</label>
+                <input id="delete-password" name="password" type="password" autoComplete="current-password" required className="input" />
+              </div>
+            </ConfirmDialog>
+          </div>
+        </section>
       )}
     </>
   );

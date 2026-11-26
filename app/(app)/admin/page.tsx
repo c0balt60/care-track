@@ -4,7 +4,7 @@ import { Notice, noticeText, PageHeader, param } from "@/components/ui";
 import { adminErrors, listUsers } from "@/lib/admin-users";
 import { requireRole } from "@/lib/auth";
 import { USER_ROLES } from "@/lib/db/schema";
-import { disableAccount, enableAccount, setRole } from "./actions";
+import { deleteAccount, disableAccount, enableAccount, setRole } from "./actions";
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -19,7 +19,7 @@ export default async function Admin({
   const rows = await listUsers(q);
 
   const notice = noticeText(
-    { role: "Role updated.", disabled: "Account disabled.", enabled: "Account enabled." },
+    { role: "Role updated.", disabled: "Account disabled.", enabled: "Account enabled.", deleted: "Account deleted. Any appointment history stays, without their details." },
     param(sp.notice),
   );
   const error = noticeText(adminErrors, param(sp.error));
@@ -102,6 +102,19 @@ export default async function Admin({
                       <input type="hidden" name="userId" value={u.id} />
                     </ConfirmDialog>
                   )}
+
+                  <ConfirmDialog
+                    id={`delete-${u.id}`}
+                    trigger="Delete"
+                    title={`Delete ${u.name}'s account?`}
+                    text="Their login is deleted and they're signed out. A patient's upcoming appointments are cancelled and their details removed; the clinic keeps their past visits without them. You can't undo it."
+                    confirm="Delete account"
+                    cancel="Cancel"
+                    danger
+                    action={deleteAccount}
+                  >
+                    <input type="hidden" name="userId" value={u.id} />
+                  </ConfirmDialog>
                 </div>
               )}
             </li>
