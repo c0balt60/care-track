@@ -202,6 +202,11 @@ export const patients = pgTable(
     name: text("name").notNull(),
     dob: date("dob"),
     phone: text("phone"),
+    /**
+     * Set when the patient's account was deleted (#78). The row stays so their appointment
+     * history does, but it's anonymized: name "Deleted patient", no DOB, no phone, no account.
+     */
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

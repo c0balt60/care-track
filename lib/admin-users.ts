@@ -8,6 +8,7 @@
 // change first locks all active admins, always in the same order. The second change then
 // waits, sees the first one's result, and gets refused if it would leave nobody.
 import { and, asc, eq, ilike, isNull, or } from "drizzle-orm";
+import { eraseAccount } from "./account-deletion";
 import { audit } from "./audit";
 import { db } from "./db";
 import { sessions, USER_ROLES, users } from "./db/schema";
@@ -110,6 +111,25 @@ export async function enableUser(actorId: string, userId: string): Promise<Admin
 
     await tx.update(users).set({ disabledAt: null }).where(eq(users.id, userId));
     await audit(actorId, "user.enable", "users", userId, { disabled: { from: true, to: false } }, tx);
+    return { ok: true } as const;
+  });
+}
+
+/**
+ * Deletes an account on request (#78), the same way a patient deleting their own does: see
+ * eraseAccount in ./account-deletion.ts. Same guards as disabling: not your own account, and
+ * not the last active admin. A practitioner's public profile stays, with no login; a staff
+ * member's clinic link goes.
+ */
+export async function deleteUser(actorId: string, userId: string, now = new Date()): Promise<AdminResult> {
+  if (actorId === userId) return { ok: false, error: "self" };
+
+  return db.transaction(async (tx) => {
+    const found = await begin(tx, userId);
+    if (!found) return { ok: false, error: "not_found" } as const;
+    if (isLastActiveAdmin(found.user, found.activeAdmins)) return { ok: false, error: "last_admin" } as const;
+
+    await eraseAccount(tx, actorId, userId, now);
     return { ok: true } as const;
   });
 }

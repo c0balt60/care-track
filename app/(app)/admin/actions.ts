@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { changeRole, disableUser, enableUser, type AdminResult } from "@/lib/admin-users";
+import { changeRole, deleteUser, disableUser, enableUser, type AdminResult } from "@/lib/admin-users";
 import { getViewerAs } from "@/lib/auth";
 
 // The acting admin always comes from the session. The user id comes from the form, which
@@ -31,4 +31,10 @@ export async function disableAccount(formData: FormData) {
 export async function enableAccount(formData: FormData) {
   const admin = await adminOrLogin();
   finish(await enableUser(admin.userId, String(formData.get("userId") ?? "")), "enabled");
+}
+
+/** Deletes an account on request (#78). See deleteUser in lib/admin-users.ts. */
+export async function deleteAccount(formData: FormData) {
+  const admin = await adminOrLogin();
+  finish(await deleteUser(admin.userId, String(formData.get("userId") ?? "")), "deleted");
 }

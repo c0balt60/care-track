@@ -42,6 +42,9 @@ vi.mock("next/navigation", () => ({
   },
 }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
+vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
+// Only signOut is reached (after deleting your own account), to clear the cookie.
+vi.mock("@/lib/better-auth", () => ({ auth: { api: { signOut: async () => {} } } }));
 vi.mock("next/server", async (original) => ({ ...(await original<object>()), after: () => {} }));
 
 const { db } = await import("@/lib/db");
@@ -50,7 +53,7 @@ const appointmentActions = await import("@/app/(app)/appointments/[id]/actions")
 const { bookAppointment, bookForPatient, lookupPatient } = await import("@/app/(app)/book/[slotId]/actions");
 const { removeException } = await import("@/app/(app)/availability/actions");
 const { removePractitioner, updateClinicProfile } = await import("@/app/(app)/clinic/actions");
-const { updatePatientDetails, updatePractitionerProfile } = await import("@/app/(app)/settings/actions");
+const { deleteMyAccount, updatePatientDetails, updatePractitionerProfile } = await import("@/app/(app)/settings/actions");
 const adminActions = await import("@/app/(app)/admin/actions");
 const adminPractitionerActions = await import("@/app/(app)/admin/practitioners/actions");
 const { loadAppointmentFor } = await import("@/lib/appointments");
@@ -343,6 +346,27 @@ describe("settings", () => {
   });
 });
 
+describe("account deletion (#78)", () => {
+  it("a patient can only delete their own account, and only with the right password", async () => {
+    // Naming another user in the form changes nothing: who is deleted comes from the session.
+    expect(await expectNoChange("patient1", () => deleteMyAccount(form({ password: "wrong-password", userId: user.patient2 })))).toBe(
+      "/settings?error=password",
+    );
+  });
+
+  it("only patients delete their own account in settings", async () => {
+    for (const who of ["staffX", "pracA", "admin"] as const) {
+      expect(await expectNoChange(who, () => deleteMyAccount(form({ password: "whatever" }))), who).toBe("/settings?error=no-patient");
+    }
+  });
+
+  it("nobody but an admin can delete someone else's account", async () => {
+    for (const who of ["patient1", "pracA", "staffX"] as const) {
+      expect(await expectNoChange(who, () => adminActions.deleteAccount(form({ userId: user.patient2 }))), who).toBe("/login");
+    }
+  });
+});
+
 describe("admin actions", () => {
   it("nobody but an admin can change roles, disable accounts or verify practitioners", async () => {
     for (const who of ["patient1", "pracA", "staffX"] as const) {
@@ -394,6 +418,13 @@ describe("the right person can still do it, and it's audited", () => {
     const [booked] = await db.select().from(schema.appointments).where(eq(schema.appointments.startsAt, slot.start));
     expect(booked).toMatchObject({ patientId: id.p1, status: "confirmed", bookedBy: "staff" });
     expect(await actions()).toEqual(["patient.lookup", "appointment.book"]);
+  });
+
+  it("an admin can delete an account: upcoming visits cancelled, patient anonymized, login gone", async () => {
+    expect(await attempt("admin", () => adminActions.deleteAccount(form({ userId: user.patient2 })))).toBe("/admin?notice=deleted");
+    expect(await actions()).toEqual(["appointment.cancel", "patient.anonymize", "user.delete"]);
+    const [p2] = await db.select().from(schema.patients).where(eq(schema.patients.id, id.p2));
+    expect(p2).toMatchObject({ name: "Deleted patient", dob: null, phone: null, userId: null });
   });
 
   it("staff can add a new patient and book them", async () => {

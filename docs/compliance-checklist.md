@@ -61,14 +61,32 @@ So a failed sign-up would have logged the new patient's name, date of birth and 
 
 ## 5. Data retention and account deletion
 
+### Retention policy
+
+How long each kind of data is kept. The periods live in `RETENTION` in [`lib/retention.ts`](../lib/retention.ts), and the daily cron enforces them with `purgeExpiredData()`.
+
+| Data | Kept for | How it's removed |
+|---|---|---|
+| Appointments and their history | 6 years after the appointment ended (the HIPAA documentation rule) | Deleted by the daily cron. Appointments with a payment are kept: financial records follow their own rules. |
+| Audit log | 6 years after the row was written | Deleted by the daily cron. The append-only trigger allows deleting only rows older than 6 years, and never allows updates. |
+| Patient record (name, date of birth, phone) | While the account exists | Anonymized when the account is deleted. The row stays so the appointment history does. |
+| Login (email, password hash) | While the account exists | Deleted with the account. |
+| Sessions | 7 days, or until log-out | Deleted by the daily cron once expired. |
+| Email verification tokens | Until they expire | Deleted by the daily cron once expired. |
+| Rate-limit counters (hashed keys) | 1 day | Pruned by the daily cron. |
+
+### Checks
+
 | Check | Status | Evidence |
 |---|---|---|
+| A patient can delete their own account | Pass (#78) | Settings, "Delete account". Needs their password and counts against the log-in rate limit. `deleteOwnAccount` in [`lib/account-deletion.ts`](../lib/account-deletion.ts); tests in [`lib/account-deletion.test.ts`](../lib/account-deletion.test.ts) |
+| An admin can delete any account on request | Pass (#78) | "Delete" on `/admin`; can't delete yourself or the last active admin. `deleteUser` in [`lib/admin-users.ts`](../lib/admin-users.ts) |
+| Deleting removes everything that identifies the person, and keeps the records the clinic needs | Pass (#78) | Login, sessions and password hash deleted. Patient row anonymized ("Deleted patient", no date of birth, no phone). Upcoming appointments cancelled, past ones kept. Test "deletes the login, anonymizes the patient…" also checks the audit trail holds no name, email or phone. |
 | An admin can shut an account off at once: signed out everywhere, can't sign in | Pass | `disableUser` in [`lib/admin-users.ts`](../lib/admin-users.ts), with tests |
-| The audit trail survives: append-only, and keeps the actor's id after their account is gone | Pass | Trigger in [`drizzle/0004_audit_log.sql`](../drizzle/0004_audit_log.sql); tests "audit_log is append-only" in `lib/audit.test.ts` |
+| The audit trail survives: append-only within the retention period, and keeps the actor's id after their account is gone | Pass | Trigger in [`drizzle/0012_account_deletion_retention.sql`](../drizzle/0012_account_deletion_retention.sql); tests in `lib/audit.test.ts` and [`lib/retention.test.ts`](../lib/retention.test.ts) |
 | Appointment history can't be lost by deleting a patient or practitioner by accident | Pass | `onDelete: "restrict"` on `appointments.patient_id` and `practitioner_id` |
-| Temporary data is cleaned up | Pass | `rate_limits` is pruned by the daily cron; sessions expire after 7 days |
-| **A user can ask for their account to be deleted, and it is** | **Gap** | Not built. Real erasure has to keep appointment history and the audit trail (which law requires a clinic to keep), so it means anonymizing the patient row rather than deleting it. Issue to be filed. |
-| **A written retention period for each kind of data** | **Gap** | Same issue. Proposed: appointments and audit log 6 years (the HIPAA documentation rule); sessions 7 days; rate-limit rows 1 day. |
+| Data past its retention period is deleted | Pass (#78) | `purgeExpiredData` runs in the daily cron ([`app/api/cron/reminders/route.ts`](../app/api/cron/reminders/route.ts)); tests in `lib/retention.test.ts` |
+| A written retention period for each kind of data | Pass (#78) | The policy table above |
 
 ## 6. Secrets only in env
 
