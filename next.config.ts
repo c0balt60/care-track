@@ -13,7 +13,8 @@ const csp = [
   // React uses eval in dev only, for better error stacks.
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' blob: data:",
+  // OpenStreetMap tiles for the /search results map (components/leaflet-map.tsx).
+  "img-src 'self' blob: data: https://tile.openstreetmap.org",
   "font-src 'self'",
   "connect-src 'self'",
   "object-src 'none'",

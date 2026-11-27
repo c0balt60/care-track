@@ -9,6 +9,8 @@ test("security headers apply to every path", async () => {
   const headers = Object.fromEntries(rule.headers.map((h) => [h.key, h.value]));
   expect(headers["Content-Security-Policy"]).toContain("frame-ancestors 'none'");
   expect(headers["Content-Security-Policy"]).toContain("object-src 'none'");
+  // Search map tiles (leaflet-map.tsx) are blocked without this.
+  expect(headers["Content-Security-Policy"]).toMatch(/img-src [^;]*https:\/\/tile\.openstreetmap\.org/);
   expect(headers["X-Frame-Options"]).toBe("DENY");
   expect(headers["X-Content-Type-Options"]).toBe("nosniff");
   expect(headers["Strict-Transport-Security"]).toMatch(/max-age=\d+/);

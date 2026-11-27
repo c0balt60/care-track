@@ -64,8 +64,7 @@ export default function LeafletMap({ pins, you, radiusKm }: { pins: MapPin[]; yo
       className="z-0 h-72 rounded-2xl sm:h-80"
       aria-label="Map of results"
     >
-      {/* ponytail: no CSP on this branch yet. When HRD-1 (#35) headers land, add
-          https://tile.openstreetmap.org to img-src or the tiles won't load. */}
+      {/* Tile host must stay in the CSP img-src in next.config.ts, or the tiles are blocked. */}
       <TileLayer
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
